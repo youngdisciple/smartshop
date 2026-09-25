@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Smart Store | Customer Registration</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <main class="container">
+
+        <!-- Header -->
+        <header class="header">
+
+            <div class="brand">
+                <div class="brand-icon">S</div>
+
+                <div>
+                    <h1>Smart Store</h1>
+                    <p>Customer Management System</p>
+                </div>
+            </div>
+
+        </header>
+
+
+        <!-- Registration Card -->
+        <section class="card">
+
+            <div class="card-header">
+
+                <div>
+                    <span class="section-label">CUSTOMERS</span>
+                    <h2>Add New Customer</h2>
+                    <p>
+                        Enter the customer's information to create a new account.
+                    </p>
+                </div>
+
+            </div>
+
+
+            <form id="customerForm">
+
+                <!-- Personal Information -->
+                <div class="section">
+
+                    <h3>Personal Information</h3>
+
+                    <div class="form-row">
+
+                        <div class="form-group">
+                            <label for="firstName">
+                                First Name
+                            </label>
+
+                            <input
+                                type="text"
+                                id="firstName"
+                                name="firstName"
+                                placeholder="John"
+                                required
+                            >
+                        </div>
+
+
+                        <div class="form-group">
+                            <label for="lastName">
+                                Last Name
+                            </label>
+
+                            <input
+                                type="text"
+                                id="lastName"
+                                name="lastName"
+                                placeholder="Smith"
+                                required
+                            >
+                        </div>
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label for="email">
+                            Email Address
+                        </label>
+
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            placeholder="john.smith@email.com"
+                            required
+                        >
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label for="phone">
+                            Telephone
+                        </label>
+
+                        <input
+                            type="tel"
+                            id="phone"
+                            name="phone"
+                            placeholder="514-555-1234"
+                            required
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <!-- Address Information -->
+                <div class="section">
+
+                    <div class="form-group">
+
+                        <label for="street">
+                            Street Address
+                        </label>
+
+                        <input
+                            type="text"
+                            id="street"
+                            name="street"
+                            placeholder="123 Main Street"
+                            required
+                        >
+
+                    </div>
+
+
+                    <div class="form-row">
+
+                        <div class="form-group">
+
+                            <label for="city">
+                                City
+                            </label>
+
+                            <input
+                                type="text"
+                                id="city"
+                                name="city"
+                                placeholder="Montreal"
+                                required
+                            >
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label for="province">
+                                Province / State
+                            </label>
+
+                            <input
+                                type="text"
+                                id="province"
+                                name="province"
+                                placeholder="Quebec"
+                                required
+                            >
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="form-row">
+
+                        <div class="form-group">
+
+                            <label for="postalCode">
+                                Postal Code
+                            </label>
+
+                            <input
+                                type="text"
+                                id="postalCode"
+                                name="postalCode"
+                                placeholder="H3A 1A1"
+                                required
+                            >
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label for="country">
+                                Country
+                            </label>
+
+                            <select
+                                id="country"
+                                name="country"
+                                required
+                            >
+
+                                <option value="">Select country</option>
+                                <option value="Canada">Canada</option>
+                                <option value="United States">United States</option>
+                                <option value="Mexico">Mexico</option>
+                                <option value="France">France</option>
+                                <option value="United Kingdom">United Kingdom</option>
+                                <option value="Other">Other</option>
+
+                            </select>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Submit -->
+                <div class="form-footer">
+
+                    <button type="submit">
+
+                        <span>Add Customer</span>
+
+                        <span class="arrow">→</span>
+
+                    </button>
+
+                </div>
+
+            </form>
+
+
+            <!-- Message -->
+            <div id="message"></div>
+
+        </section>
+
+
+        <footer>
+            Smart Store Management System
+        </footer>
+
+    </main>
+
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>
