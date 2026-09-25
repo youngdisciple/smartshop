@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, flash
 from werkzeug.security import generate_password_hash, check_password_hash
+from scripts.phase1 import printToLed
 
 from website import app, db
 from website.models import Customer
@@ -42,8 +43,10 @@ def signup():
             db.session.add(customer)
             db.session.commit()
             flash('Account created!', category='success')
+            printToLed(1)
             return render_template("auth/signup.html")
 
+        printToLed(2)
         return render_template("auth/signup.html")
 
     return render_template("auth/signup.html")
