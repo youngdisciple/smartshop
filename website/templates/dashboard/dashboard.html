@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block content %}
+<meta http-equiv="refresh" content="3">
+
+<div class="container-fluid py-4">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold mb-1">SmartShop Refrigerator Dashboard</h2>
+        <p class="text-muted mb-0">Live temperature and humidity from each fridge</p>
+    </div>
+
+    <!-- Refrigerator cards -->
+    <div class="row g-4">
+
+        <!-- FRIDGE 1 -->
+        <div class="col-12 col-xl-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+                    <h4 class="mb-0">Fridge 1</h4>
+                    <span
+                        class="badge rounded-pill {{ 'bg-danger' if fridges[1].temperature.error else 'bg-light text-dark' }}">
+                        {{ 'No signal' if fridges[1].temperature.error else 'Online' }}
+                    </span>
+                </div>
+
+                <div class="card-body">
+                    <div class="row g-3">
+
+                        <!-- Temperature gauge -->
+                        <div class="col-12 col-md-6">
+                            <div class="border rounded-3 bg-body-tertiary p-3 text-center h-100">
+                                <h6 class="text-uppercase text-muted fw-semibold mb-3">Temperature</h6>
+
+                                <svg class="gauge {{ 'gauge-error' if fridges[1].temperature.error }}"
+                                    viewBox="0 0 220 145">
+                                    <path class="gauge-bg" d="M 20 110 A 90 90 0 0 1 200 110" />
+                                    <path class="gauge-fill" d="M 20 110 A 90 90 0 0 1 200 110"
+                                        style="stroke-dasharray: {{ fridges[1].temperature.dash }} 283" />
+                                    <line class="gauge-needle" x1="110" y1="110" x2="110" y2="35"
+                                        style="transform: rotate({{ fridges[1].temperature.angle }}deg)" />
+                                    <circle cx="110" cy="110" r="6" class="gauge-center" />
+                                    <text x="110" y="135" class="gauge-value">{{ fridges[1].temperature.label }}</text>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Humidity gauge -->
+                        <div class="col-12 col-md-6">
+                            <div class="border rounded-3 bg-body-tertiary p-3 text-center h-100">
+                                <h6 class="text-uppercase text-muted fw-semibold mb-3">Humidity</h6>
+
+                                <svg class="gauge {{ 'gauge-error' if fridges[1].humidity.error }}"
+                                    viewBox="0 0 220 145">
+                                    <path class="gauge-bg" d="M 20 110 A 90 90 0 0 1 200 110" />
+                                    <path class="gauge-fill" d="M 20 110 A 90 90 0 0 1 200 110"
+                                        style="stroke-dasharray: {{ fridges[1].humidity.dash }} 283" />
+                                    <line class="gauge-needle" x1="110" y1="110" x2="110" y2="35"
+                                        style="transform: rotate({{ fridges[1].humidity.angle }}deg)" />
+                                    <circle cx="110" cy="110" r="6" class="gauge-center" />
+                                    <text x="110" y="135" class="gauge-value">{{ fridges[1].humidity.label }}</text>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Temperature threshold -->
+                    <form class="border-top mt-4 pt-3" method="post"
+                        action="{{ url_for('save_threshold', fridge_id=1) }}">
+                        <label for="threshold-1" class="form-label fw-bold">
+                            Temperature Threshold
+                        </label>
+
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="threshold-1" name="threshold"
+                                value="{{ thresholds[1] }}" min="-10" max="50" step="0.1" required>
+                            <span class="input-group-text">°C</span>
+                            <button type="submit" class="btn btn-primary">
+                                Save Threshold
+                            </button>
+                        </div>
+
+                        <div class="form-text">
+                            An alert is triggered when the temperature exceeds
+                            this value.
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- FRIDGE 2 -->
+        <div class="col-12 col-xl-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center py-3">
+                    <h4 class="mb-0">Fridge 2</h4>
+                    <span
+                        class="badge rounded-pill {{ 'bg-danger' if fridges[2].temperature.error else 'bg-light text-dark' }}">
+                        {{ 'No signal' if fridges[2].temperature.error else 'Online' }}
+                    </span>
+                </div>
+
+                <div class="card-body">
+                    <div class="row g-3">
+
+                        <!-- Temperature gauge -->
+                        <div class="col-12 col-md-6">
+                            <div class="border rounded-3 bg-body-tertiary p-3 text-center h-100">
+                                <h6 class="text-uppercase text-muted fw-semibold mb-3">Temperature</h6>
+
+                                <svg class="gauge {{ 'gauge-error' if fridges[2].temperature.error }}"
+                                    viewBox="0 0 220 145">
+                                    <path class="gauge-bg" d="M 20 110 A 90 90 0 0 1 200 110" />
+                                    <path class="gauge-fill" d="M 20 110 A 90 90 0 0 1 200 110"
+                                        style="stroke-dasharray: {{ fridges[2].temperature.dash }} 283" />
+                                    <line class="gauge-needle" x1="110" y1="110" x2="110" y2="35"
+                                        style="transform: rotate({{ fridges[2].temperature.angle }}deg)" />
+                                    <circle cx="110" cy="110" r="6" class="gauge-center" />
+                                    <text x="110" y="135" class="gauge-value">{{ fridges[2].temperature.label }}</text>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Humidity gauge -->
+                        <div class="col-12 col-md-6">
+                            <div class="border rounded-3 bg-body-tertiary p-3 text-center h-100">
+                                <h6 class="text-uppercase text-muted fw-semibold mb-3">Humidity</h6>
+
+                                <svg class="gauge {{ 'gauge-error' if fridges[2].humidity.error }}"
+                                    viewBox="0 0 220 145">
+                                    <path class="gauge-bg" d="M 20 110 A 90 90 0 0 1 200 110" />
+                                    <path class="gauge-fill" d="M 20 110 A 90 90 0 0 1 200 110"
+                                        style="stroke-dasharray: {{ fridges[2].humidity.dash }} 283" />
+                                    <line class="gauge-needle" x1="110" y1="110" x2="110" y2="35"
+                                        style="transform: rotate({{ fridges[2].humidity.angle }}deg)" />
+                                    <circle cx="110" cy="110" r="6" class="gauge-center" />
+                                    <text x="110" y="135" class="gauge-value">{{ fridges[2].humidity.label }}</text>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Temperature threshold -->
+                    <form class="border-top mt-4 pt-3" method="post"
+                        action="{{ url_for('save_threshold', fridge_id=2) }}">
+                        <label for="threshold-2" class="form-label fw-bold">
+                            Temperature Threshold
+                        </label>
+
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="threshold-2" name="threshold"
+                                value="{{ thresholds[2] }}" min="-10" max="50" step="0.1" required>
+                            <span class="input-group-text">°C</span>
+                            <button type="submit" class="btn btn-success">
+                                Save Threshold
+                            </button>
+                        </div>
+
+                        <div class="form-text">
+                            An alert is triggered when the temperature exceeds
+                            this value.
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ONE SHARED MOTOR STATUS SECTION -->
+    <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header bg-dark text-white py-3">
+            <h4 class="mb-0">Motor Status</h4>
+        </div>
+
+        <div class="card-body d-flex align-items-center justify-content-between
+                    flex-wrap gap-3">
+            <div>
+                <span class="text-muted">Current status</span>
+                <h5 class="mb-0">
+                    <span id="motor-indicator" class="badge rounded-pill bg-secondary">Unknown</span>
+                </h5>
+            </div>
+
+            <div class="text-muted">
+                Motor status will be updated when connected to the device.
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .gauge {
+        display: block;
+        margin: 0 auto;
+        width: 100%;
+        max-width: 270px;
+        overflow: visible;
+    }
+
+    .gauge-bg {
+        fill: none;
+        stroke: #dedede;
+        stroke-width: 22;
+        stroke-linecap: butt;
+    }
+
+    .gauge-fill {
+        fill: none;
+        stroke: #3996cc;
+        stroke-width: 22;
+        stroke-linecap: butt;
+        stroke-dasharray: 0 283;
+    }
+
+    .gauge-needle {
+        stroke: #243b53;
+        stroke-width: 4;
+        stroke-linecap: round;
+        transform-origin: 110px 110px;
+        transform: rotate(-90deg);
+    }
+
+    .gauge-center {
+        fill: #243b53;
+    }
+
+    .gauge-value {
+        font-size: 16px;
+        font-weight: bold;
+        fill: currentColor;
+        text-anchor: middle;
+    }
+
+    .gauge-error .gauge-fill {
+        stroke: #dc3545;
+    }
+
+    .gauge-error .gauge-value {
+        fill: #dc3545;
+    }
+</style>
+{% endblock %}
