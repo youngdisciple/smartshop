@@ -1,8 +1,10 @@
 import os
+import threading
 from dotenv import load_dotenv
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
+from gmail_reply_reader import start_reply_reader
 
 class Base(DeclarativeBase):
     pass
@@ -19,16 +21,20 @@ def init_app(debug: bool | None):
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
 
-    
     from website.routes import admin, auth
     app.register_blueprint(admin)
     app.register_blueprint(auth)
-    
     # WARNING: Upon adding a new model inside the model class, you should reflect on
     # the addition here as well.
     from website.models import Customer
     with app.app_context():
         db.create_all()
 
+    # Start the Gmail reply reader once.
+    if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        threading.Thread(
+            target=start_reply_reader,
+            daemon=True
+        ).start()
 
     app.run(debug=debug)

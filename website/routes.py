@@ -1,9 +1,13 @@
-from flask import Blueprint, render_template, request, flash
+from flask import Blueprint, redirect, render_template, request, flash, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
-from scripts.phase1 import printToLed
+# from scripts.phase1 import printToLed
 
 from website import app, db
+from website.esp32Controller import set_threshold, start, get_fridges, thresholds
 from website.models import Customer
+import fan_controller
+#start
+start()
 
 # Blueprints
 admin = Blueprint('admin', __name__, url_prefix='/admin')
@@ -43,10 +47,28 @@ def signup():
             db.session.add(customer)
             db.session.commit()
             flash('Account created!', category='success')
-            printToLed(1)
+            # printToLed(1)
             return render_template("auth/signup.html")
 
-        printToLed(2)
+        # printToLed(2)
         return render_template("auth/signup.html")
 
     return render_template("auth/signup.html")
+
+@app.route("/dashboard")
+def dashboard():
+    return render_template(
+        "dashboard/dashboard.html",
+        fridges=get_fridges(),
+        thresholds=thresholds,
+        motor_on=fan_controller.fan_is_on
+    )
+
+@app.route("/thresholds/<int:fridge_id>", methods=['POST'])
+def save_threshold(fridge_id):
+    threshold = float(request.form['threshold'])
+ 
+    if -10 <= threshold <= 50:
+        set_threshold(fridge_id, threshold)
+ 
+    return redirect(url_for('dashboard'))
