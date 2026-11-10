@@ -1,0 +1,2 @@
+-r requirements.txt
+RPi.GPIO>=0.7.1,<0.8; platform_machine == "aarch64" or platform_machine == "armv7l"

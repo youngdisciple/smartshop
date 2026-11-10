@@ -5,6 +5,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 instance/
-requirements/
+requirements/*
+!requirements/PHASE-3-IMPLEMENTATION.md
 output/
 AGENTS.md
+firmware/**/secrets.h
+.pio/
