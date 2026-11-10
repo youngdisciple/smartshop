@@ -3,6 +3,7 @@ import atexit
 import os
 from smartshop import create_app
 from smartshop.extensions import db
+from smartshop.services.migrations import migrate
 
 
 def main(debug=True):
@@ -10,7 +11,7 @@ def main(debug=True):
     runtime = app.extensions["smartshop"]
     if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         with app.app_context():
-            db.create_all()
+            migrate()
         atexit.register(runtime.stop)
         runtime.start()
     try:
