@@ -1,0 +1,2 @@
+{% extends 'base.html' %}{% from 'shop/forms.html' import csrf with context %}
+{% block content %}<header class="page-header"><div><h1>{{ _('Checkout') }}</h1><p>{{ _('Scan your products, review your cart and simulate payment') }}</p></div></header><section class="panel scanner-panel"><form method="post">{{ csrf() }}<button>{{ _('Start a new checkout') }}</button></form><p class="help">{{ _('No real payment details are requested') }}</p></section>{% endblock %}

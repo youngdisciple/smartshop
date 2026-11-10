@@ -1,0 +1,2 @@
+{% extends 'base.html' %}{% from 'shop/forms.html' import csrf, action with context %}
+{% block content %}<header class="page-header"><h1>{{ _('Simulated payment') }}</h1></header><section class="panel scanner-panel"><p>{{ _('No real payment details are requested') }}</p><p class="total">{{ _('Total') }}: {{ total|money }} CAD</p><form method="post">{{ csrf() }}<div class="actions">{{ action('Simulate success', 'success', 'outcome') }}{{ action('Simulate failure', 'failure', 'outcome') }}{{ action('Cancel payment', 'cancel', 'outcome') }}</div></form></section>{% endblock %}

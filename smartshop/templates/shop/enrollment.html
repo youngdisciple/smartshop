@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% from 'shop/forms.html' import csrf, action with context %}
+{% block content %}<header class="page-header"><h1>{{ _('Manage membership card') }}</h1></header><section class="panel scanner-panel"><p>{{ _('Present an unassigned card, then confirm linking it to your account') }}</p>
+{% if operation_id %}<p id="membership-status" role="status" data-url="{{ url_for('shop.enrollment_status') }}">{{ _('Card ready to confirm') if uid else _('Present a membership card') }}</p>{% if uid %}<p>{{ _('Membership card') }}: <strong>{{ uid }}</strong></p>{% endif %}
+<form method="post">{{ csrf() }}<div class="actions">{% if uid %}{{ action('Confirm link', 'confirm') }}{% endif %}{{ action('Cancel', 'cancel') }}</div></form>
+{% else %}<form method="post">{{ csrf() }}<label class="checkbox"><input type="checkbox" name="replace" value="yes">{{ _('Replace my existing card') }}</label><div class="actions">{{ action('Start enrollment', 'start') }}</div></form>{% endif %}</section>{% endblock %}
+{% block scripts %}{% if operation_id and not uid %}<script src="{{ url_for('static', filename='membership.js') }}" defer></script>{% endif %}{% endblock %}

@@ -1,0 +1,5 @@
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+{% macro field(name, label, value='', type='text', required=true, maxlength=100) %}
+<div class="field"><label for="{{ name }}">{{ _(label) }}</label><input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ value }}" maxlength="{{ maxlength }}"{% if required %} required{% endif %}></div>
+{% endmacro %}
+{% macro action(label, value, name='action') %}<button name="{{ name }}" value="{{ value }}">{{ _(label) }}</button>{% endmacro %}

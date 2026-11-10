@@ -1,0 +1,8 @@
+{% extends 'base.html' %}{% from 'shop/forms.html' import csrf, field with context %}
+{% block content %}<header class="page-header"><h1>{{ _('Edit product') if product else _('Register product') }}</h1></header>
+<section class="panel"><form class="customer-form" method="post">{{ csrf() }}<div class="form-grid">
+{% for name, label, limit in [('name', 'Name', 100), ('category', 'Category', 60), ('producer', 'Producer', 100), ('upc', 'UPC', 13), ('epc', 'EPC', 24)] %}{{ field(name, label, request.form.get(name, product[name] if product else ''), maxlength=limit) }}{% endfor %}
+{{ field('price', 'Price (CAD)', request.form.get('price', product.price_cents|money if product else ''), maxlength=10) }}
+</div><p class="help">{{ _('Registration does not add stock') }}</p><div class="form-actions"><button>{{ _('Save product') }}</button><a href="{{ url_for('shop.products') }}">{{ _('Cancel') }}</a></div></form></section>
+<section class="panel scanner-panel"><h2>{{ _('Scanner tools') }}</h2><p>{{ _('Scan a barcode into UPC and press Tab, or enter it manually') }}</p><div class="actions"><button type="button" id="lookup-upc">{{ _('Look up UPC') }}</button><button type="button" id="capture-epc">{{ _('Capture EPC') }}</button><button type="button" id="cancel-capture">{{ _('Stop scan') }}</button></div><p id="scanner-status" role="status" aria-live="polite" data-multiple="{{ _('Present only one product tag') }}"></p></section>
+{% endblock %}{% block scripts %}<script src="{{ url_for('static', filename='product.js') }}" defer></script>{% endblock %}
