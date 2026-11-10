@@ -1,0 +1,2 @@
+{% extends 'base.html' %}
+{% block content %}<header class="page-header"><h1>{{ error.code }}</h1></header><section class="panel scanner-panel"><p role="alert">{{ _('Invalid CSRF token') if error.description == 'Invalid CSRF token' else _('Request could not be completed') }}</p><a href="{{ url_for('shop.checkout_start') }}">{{ _('Return to checkout') }}</a></section>{% endblock %}

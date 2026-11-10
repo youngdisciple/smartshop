@@ -1,37 +1,42 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ session.get('language', 'en') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}SmartShop{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <div class="app-layout">
-    <aside class="sidebar">
-      <a class="brand" href="{{ url_for('dashboard.index') }}">SmartShop<span>Store management</span></a>
-      <nav aria-label="Main navigation">
-        {% for endpoint, label in [('dashboard.index', 'Refrigerators'), ('admin.index_customer', 'Customers'), ('auth.signup', 'Add customer')] %}
-        <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
-        {% endfor %}
-      </nav>
-      <p class="sidebar-note">Everyday essentials.<br>Thoughtfully managed.</p>
-    </aside>
-    <main id="main-content" tabindex="-1">
-      <div class="eyebrow">SmartShop / Store dashboard</div>
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <ul class="flashes" role="status">
-          {% for category, message in messages %}
-          <li class="flash {{ category }}">{{ message }}</li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-      {% endwith %}
-      {% block content %}{% endblock %}
-    </main>
-  </div>
+<a class="skip-link" href="#main-content">{{ _('Skip to content') }}</a>
+<div class="app-layout">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('shop.checkout_start') }}">SmartShop<span>{{ _('Store management') }}</span></a>
+    <nav aria-label="{{ _('Main navigation') }}">
+      {% set links = [('shop.checkout_start', 'Checkout'), ('dashboard.index', 'Refrigerators')] %}
+      {% if g.customer %}
+        {% set links = links + [('shop.account', 'My account')] %}
+        {% if g.customer.is_admin %}{% set links = links + [('shop.products', 'Products'), ('admin.index_customer', 'Customers')] %}{% endif %}
+      {% else %}{% set links = links + [('auth.login', 'Sign in'), ('auth.signup', 'Create account')] %}{% endif %}
+      {% for endpoint, label in links %}
+      <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} class="active" aria-current="page"{% endif %}>{{ _(label) }}</a>
+      {% endfor %}
+    </nav>
+    {% if g.customer %}<form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>{{ _('Sign out') }}</button></form>{% endif %}
+    <form class="language-form" method="post" action="{{ url_for('shop.language') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.path }}">
+      <label for="language">{{ _('Language') }}</label><select id="language" name="language"><option value="en"{% if session.get('language', 'en') == 'en' %} selected{% endif %}>English</option><option value="fr"{% if session.get('language') == 'fr' %} selected{% endif %}>Français</option></select><button>{{ _('Apply') }}</button>
+    </form>
+  </aside>
+  <main id="main-content" tabindex="-1">
+    <div class="eyebrow">SmartShop / {{ _('Store dashboard') }}</div>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+    <ul class="flashes" role="status">{% for category, message in messages %}<li class="flash {{ category }}">{{ message }}</li>{% endfor %}</ul>
+    {% endif %}{% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% block scripts %}{% endblock %}
 </body>
 </html>
