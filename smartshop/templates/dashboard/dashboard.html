@@ -1,50 +1,50 @@
 {% extends "base.html" %}
-{% block title %}Refrigerators · SmartShop{% endblock %}
+{% block title %}{{ _('Refrigerators') }} · SmartShop{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="3">{% endblock %}
 {% block content %}
 <header class="page-header">
-  <div><h1>Refrigerators</h1><p>Keep an eye on the conditions that keep things fresh.</p></div>
-  <span class="page-note">Refreshes every 3 seconds</span>
+  <div><h1>{{ _('Refrigerators') }}</h1><p>{{ _('Keep an eye on the conditions that keep things fresh.') }}</p></div>
+  <span class="page-note">{{ _('Refreshes every 3 seconds') }}</span>
 </header>
 {% if not mqtt_connected %}
-<div class="notice" role="status">Refrigerator connection offline. Waiting for the MQTT broker; reconnection is automatic.</div>
+<div class="notice" role="status">{{ _('Refrigerator connection offline. Waiting for the MQTT broker; reconnection is automatic.') }}</div>
 {% endif %}
 <div class="fridge-grid">
   {% for fridge_id, fridge in fridges.items() %}
   <section class="panel" aria-labelledby="fridge-{{ fridge_id }}">
     <header class="panel-header">
-      <h2 id="fridge-{{ fridge_id }}">Fridge {{ fridge_id }}</h2>
-      <span class="status {{ 'unavailable' if fridge.temperature.error or fridge.humidity.error else 'online' }}">{{ 'No signal' if fridge.temperature.error or fridge.humidity.error else 'Online' }}</span>
+      <h2 id="fridge-{{ fridge_id }}">{{ _('Fridge') }} {{ fridge_id }}</h2>
+      <span class="status {{ 'unavailable' if fridge.temperature.error or fridge.humidity.error else 'online' }}">{{ _('No signal') if fridge.temperature.error or fridge.humidity.error else _('Online') }}</span>
     </header>
     <div class="readings">
       {% for kind, label in [('temperature', 'Temperature'), ('humidity', 'Humidity')] %}
       {% set reading = fridge[kind] %}
       <div class="reading">
-        <h3>{{ label }}</h3>
-        <svg class="gauge {{ 'gauge-error' if reading.error }}" viewBox="0 0 220 145" role="img" aria-label="{{ label }}: {{ 'No signal' if reading.error else reading.label }}">
+        <h3>{{ _(label) }}</h3>
+        <svg class="gauge {{ 'gauge-error' if reading.error }}" viewBox="0 0 220 145" role="img" aria-label="{{ _(label) }}: {{ _('No signal') if reading.error else reading.label }}">
           <path class="gauge-bg" d="M 20 110 A 90 90 0 0 1 200 110" />
           <path class="gauge-fill" d="M 20 110 A 90 90 0 0 1 200 110" style="stroke-dasharray: {{ reading.dash }} 283" />
           <line class="gauge-needle" x1="110" y1="110" x2="110" y2="35" style="transform: rotate({{ reading.angle }}deg)" />
           <circle cx="110" cy="110" r="5" class="gauge-center" />
-          <text x="110" y="138" class="gauge-value">{{ 'No signal' if reading.error else reading.label }}</text>
+          <text x="110" y="138" class="gauge-value">{{ _('No signal') if reading.error else reading.label }}</text>
         </svg>
       </div>
       {% endfor %}
     </div>
-    <form class="threshold-form" method="post" action="{{ url_for('dashboard.save_threshold', fridge_id=fridge_id) }}">
-      <label for="threshold-{{ fridge_id }}">Temperature threshold (°C)</label>
+    {% if g.customer and g.customer.is_admin %}<form class="threshold-form" method="post" action="{{ url_for('dashboard.save_threshold', fridge_id=fridge_id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label for="threshold-{{ fridge_id }}">{{ _('Temperature threshold (°C)') }}</label>
       <div class="threshold-controls">
         <input type="number" id="threshold-{{ fridge_id }}" name="threshold" value="{{ thresholds[fridge_id] }}" min="-10" max="50" step="0.1" aria-describedby="threshold-help-{{ fridge_id }}" required>
-        <button type="submit">Save threshold</button>
+        <button type="submit">{{ _('Save threshold') }}</button>
       </div>
-      <p class="help" id="threshold-help-{{ fridge_id }}">An alert is triggered when the temperature exceeds this value.</p>
-    </form>
+      <p class="help" id="threshold-help-{{ fridge_id }}">{{ _('An alert is triggered when the temperature exceeds this value.') }}</p>
+    </form>{% endif %}
   </section>
   {% endfor %}
 </div>
 <section class="panel fan-panel" aria-labelledby="fan-heading">
-  <div><h2 id="fan-heading">Fan status</h2><p>Shared cooling fan · Current status</p></div>
-  <span id="motor-indicator" class="status {{ 'online' if motor_on else 'idle' }}">{{ 'ON' if motor_on else 'OFF' }}</span>
+  <div><h2 id="fan-heading">{{ _('Fan status') }}</h2><p>{{ _('Shared cooling fan · Current status') }}</p></div>
+  <span id="motor-indicator" class="status {{ 'online' if motor_on else 'idle' }}">{{ _('ON') if motor_on else _('OFF') }}</span>
 </section>
-<p class="help reload-note">This page reloads automatically. Save threshold changes before the next refresh.</p>
+<p class="help reload-note">{{ _('This page reloads automatically. Save threshold changes before the next refresh.') }}</p>
 {% endblock %}

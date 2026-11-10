@@ -1,21 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Customers · SmartShop{% endblock %}
+{% block title %}{{ _('Customers') }} · SmartShop{% endblock %}
 {% block content %}
 <header class="page-header">
-  <div><h1>Customers</h1><p>Customer details, all in one place.</p></div>
-  <a class="button" href="{{ url_for('auth.signup') }}">Add customer <span aria-hidden="true">↗</span></a>
+  <div><h1>{{ _('Customers') }}</h1><p>{{ _('Customer details, all in one place.') }}</p></div>
+  <a class="button" href="{{ url_for('auth.signup') }}">{{ _('Add customer') }} <span aria-hidden="true">↗</span></a>
 </header>
 <section class="panel customer-panel" aria-labelledby="customer-heading">
-  <header class="panel-header"><h2 id="customer-heading">Customer directory</h2><span class="page-note">{{ customers|length }} {{ 'customer' if customers|length == 1 else 'customers' }}</span></header>
-  <div class="table-scroll" role="region" aria-label="Customer directory" tabindex="0">
+  <header class="panel-header"><h2 id="customer-heading">{{ _('Customer directory') }}</h2><span class="page-note">{{ customers|length }} {{ _('customer') if customers|length == 1 else _('customers') }}</span></header>
+  <div class="table-scroll" role="region" aria-label="{{ _('Customer directory') }}" tabindex="0">
     <table>
-      <caption class="visually-hidden">Customer names and contact details</caption>
-      <thead><tr><th scope="col">Name</th><th scope="col">Address</th><th scope="col">Email</th><th scope="col">Phone</th></tr></thead>
+      <caption class="visually-hidden">{{ _('Customer names and contact details') }}</caption>
+      <thead><tr><th scope="col">{{ _('Name') }}</th><th scope="col">{{ _('Address') }}</th><th scope="col">{{ _('Email') }}</th><th scope="col">{{ _('Phone') }}</th></tr></thead>
       <tbody>
         {% for customer in customers %}
         <tr><th scope="row">{{ customer.name }}</th><td>{{ customer.address }}</td><td>{{ customer.email }}</td><td>{{ customer.phone or '—' }}</td></tr>
         {% else %}
-        <tr><td colspan="4" class="empty-state">No customers yet. <a href="{{ url_for('auth.signup') }}">Add your first customer</a>.</td></tr>
+        <tr><td colspan="4" class="empty-state">{{ _('No customers yet') }}. <a href="{{ url_for('auth.signup') }}">{{ _('Add your first customer') }}</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>
