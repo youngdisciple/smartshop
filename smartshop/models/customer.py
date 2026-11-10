@@ -1,6 +1,6 @@
 from sqlalchemy.types import String
 
-from website import db
+from smartshop.extensions import db
 from sqlalchemy.orm import Mapped, mapped_column
 
 # Requirements: (Customer email, password, name, address, telephone number)
