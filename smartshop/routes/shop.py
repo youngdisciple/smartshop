@@ -7,7 +7,7 @@ from smartshop.models import Checkout, Customer, MembershipCard, Product, Purcha
 from smartshop.security import admin_required, login_required, owner
 from smartshop.presentation.i18n import tr
 from smartshop.services.catalog import product_values, receive, upc
-from smartshop.services.checkout import add_tags, finalize, review
+from smartshop.services.checkout import add_tags, add_barcode, cart_total, change_quantity, finalize, review
 from smartshop.services.receipts import deliver
 
 shop = Blueprint('shop', __name__)
@@ -203,6 +203,7 @@ def checkout_start():
     if request.method == 'POST':
         runtime().reader.cancel_owner(owner())
         runtime().membership.cancel_owner(owner())
+        session.pop('product_operation', None)
         # Abandon prior open carts for this browser.
         db.session.execute(db.update(Checkout).where(Checkout.owner == owner(), Checkout.status.in_(['scanning', 'review', 'payment'])).values(status='cancelled'))
         cart = Checkout(owner=owner())
@@ -223,6 +224,16 @@ def cart(cart_id):
                 operation = runtime().reader.arm(owner(), 'checkout:' + cart.id)
                 session['product_operation'] = operation['id']
                 notify('Product scan started')
+            elif action == 'barcode' and cart.status == 'scanning':
+                add_barcode(cart, request.form.get('upc', ''))
+                notify('Cart updated')
+            elif action in ('increase', 'decrease') and cart.status == 'scanning':
+                try:
+                    product_id = int(request.form.get('product_id', ''))
+                except ValueError:
+                    raise ValueError('Invalid operation') from None
+                change_quantity(cart, product_id, 1 if action == 'increase' else -1)
+                notify('Cart updated')
             elif action in ('remove', 'restore') and cart.status == 'scanning':
                 product_id = int(request.form.get('product_id', '0'))
                 if action == 'remove':
@@ -293,7 +304,7 @@ def cart(cart_id):
     except ValueError:
         pass
     suppressed = db.session.execute(db.select(Product).where(Product.id.in_(cart.suppressed))).scalars().all() if cart.suppressed else []
-    return render_template('shop/cart.html', cart=cart, total=sum(item['unit_cents'] for item in cart.items),
+    return render_template('shop/cart.html', cart=cart, total=cart_total(cart),
                            member=member, candidate=candidate, suppressed=suppressed)
 
 
@@ -310,8 +321,9 @@ def cart_poll(cart_id):
     messages = []
     if cart.status == 'scanning':
         try:
-            tags = runtime().reader.poll(owner(), session.get('product_operation'))
-            messages = add_tags(cart, tags)
+            if session.get('product_operation'):
+                tags = runtime().reader.poll(owner(), session['product_operation'])
+                messages = add_tags(cart, tags)
         except ValueError as error:
             messages = [str(error)]
     else:
@@ -322,7 +334,7 @@ def cart_poll(cart_id):
                 messages = ['Card ready to confirm' if card else 'Unknown membership card']
         except ValueError as error:
             messages = [str(error)]
-    return jsonify(items=cart.items, total_cents=sum(item['unit_cents'] for item in cart.items), messages=[tr(m) for m in messages])
+    return jsonify(items=cart.items, total_cents=cart_total(cart), messages=[tr(m) for m in messages])
 
 
 @shop.route('/checkout/<cart_id>/payment', methods=['GET', 'POST'])
@@ -352,7 +364,7 @@ def payment(cart_id):
         return redirect(url_for('shop.cart', cart_id=cart.id))
     if cart.status != 'payment':
         return redirect(url_for('shop.cart', cart_id=cart.id))
-    return render_template('shop/payment.html', cart=cart, total=sum(i['unit_cents'] for i in cart.items))
+    return render_template('shop/payment.html', cart=cart, total=cart_total(cart))
 
 
 def authorized_receipt(purchase_id):

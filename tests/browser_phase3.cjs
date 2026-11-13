@@ -1,7 +1,9 @@
 // Optional browser verification: NODE_PATH=/path/to/node_modules node tests/browser_phase3.cjs
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
-const today = new Date().toISOString().slice(0, 10);
+// Reception validation uses the server's local calendar date.
+const now = new Date();
+const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map(value => String(value).padStart(2, '0')).join('-');
 const suffixes = ['4965', '4970', '4968', '4951'];
 const tags = suffixes.map(suffix => 'DE' + '0'.repeat(18) + suffix); // synthetic, never physical EPC evidence
 (async () => {
@@ -59,11 +61,35 @@ const tags = suffixes.map(suffix => 'DE' + '0'.repeat(18) + suffix); // syntheti
     assert.match(await page.locator('main').textContent(), /Points earned: 3/);
     await page.screenshot({path: '/tmp/smartshop-receipt-mobile.png', fullPage: true});
     await goto('/account'); assert.equal(await page.getByRole('link', {name: 'View receipt'}).count(), 1);
+    // Barcode checkout works without arming the RFID reader. Exercise both
+    // common scanner terminators and quantity edits after an RFID poll.
+    await goto('/checkout'); await click('Start a new checkout');
+    const barcode = page.locator('#checkout-upc');
+    await barcode.fill('0000000000000'); await barcode.press('Enter');
+    await page.waitForFunction(() => document.querySelector('#cart-total').textContent === '1.25 CAD');
+    await page.getByRole('button', {name: 'Increase quantity: Development product 1', exact: true}).click();
+    await page.waitForFunction(() => document.querySelector('#cart-total').textContent === '2.50 CAD');
+    await page.getByRole('button', {name: 'Decrease quantity: Development product 1', exact: true}).click();
+    await page.waitForFunction(() => document.querySelector('#cart-total').textContent === '1.25 CAD');
+    await barcode.fill('0000000000000'); await barcode.press('Tab');
+    await page.waitForFunction(() => document.querySelector('#cart-total').textContent === '2.50 CAD');
+    await click('Start product scan');
+    await fill('tags', tags[0]); await click('Queue development scans');
+    await page.waitForTimeout(1500);
+    assert.equal(await page.locator('#cart-total').textContent(), '2.50 CAD');
+    assert.equal((await page.locator('#cart-items tr').first().locator('[data-label="Quantity"]').textContent()).trim(), '2');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await click('Review purchase'); await click('Continue as guest'); await click('Proceed to simulated payment');
+    assert.match(await page.locator('main').textContent(), /2.50 CAD/);
+    await click('Simulate success');
+    await page.getByRole('heading', {name: 'Receipt', exact: true}).waitFor();
+    assert.equal((await page.locator('tbody tr').first().locator('td').first().textContent()).trim(), '2');
+    await goto('/account');
     await page.locator('#language').selectOption('fr'); await click('Apply');
     assert.equal(await page.locator('html').getAttribute('lang'), 'fr');
     assert.equal(await page.getByRole('heading', {name: 'Mon compte'}).count(), 1);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
-    console.log('Browser flow passed: product reception, enrollment, repeated scans, remove, member payment failure/success, receipt/history, French, desktop/mobile overflow.');
+    console.log('Browser flow passed: product reception, enrollment, RFID deduplication, barcode Enter/Tab, quantity controls, mixed scans, payment, receipts/history, French, desktop/mobile overflow.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
