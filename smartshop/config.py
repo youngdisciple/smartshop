@@ -39,6 +39,7 @@ def load_config():
         "CF600_BAUDRATE": int(os.getenv('CF600_BAUDRATE', '57600')),
         "CF600_INPUT_DEVICE": os.getenv('CF600_INPUT_DEVICE', '/dev/input/by-id/usb-CFUSB_HID_By_YLW28-if01-event-kbd'),
         "RECEIPT_FROM": os.getenv("RECEIPT_FROM"),
+        "RECEIPT_EMAIL_PROVIDER": os.getenv('RECEIPT_EMAIL_PROVIDER', 'resend').strip().lower(),
         "RESEND_API_KEY": os.getenv("RESEND_API_KEY"),
         "ALERT_FROM": os.getenv("ALERT_FROM", "onboarding@resend.dev"),
         "ALERT_TO": os.getenv("ALERT_TO"),

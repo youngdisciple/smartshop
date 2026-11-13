@@ -26,7 +26,8 @@ class ShopTests(unittest.TestCase):
     def setUp(self):
         self.app = create_app({'TESTING': True, 'SECRET_KEY': 'test', 'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
                                'FAKE_READERS_ENABLED': True, 'PRODUCT_READER_BACKEND': 'disabled', 'FRIDGE_SERVICES_ENABLED': False,
-                               'GMAIL_SERVICE_ENABLED': False, 'RESEND_API_KEY': None})
+                               'GMAIL_SERVICE_ENABLED': False, 'RESEND_API_KEY': None,
+                               'RECEIPT_EMAIL_PROVIDER': 'resend'})
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()

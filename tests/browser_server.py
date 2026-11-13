@@ -12,7 +12,8 @@ def main():
     app = create_app({'TESTING': True, 'SECRET_KEY': 'disposable-browser-fixture',
                       'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:', 'FAKE_READERS_ENABLED': True, 'PRODUCT_READER_BACKEND': 'disabled',
                       'FRIDGE_SERVICES_ENABLED': False, 'GMAIL_SERVICE_ENABLED': False,
-                      'MEMBERSHIP_SERVICE_ENABLED': False, 'RESEND_API_KEY': None})
+                      'MEMBERSHIP_SERVICE_ENABLED': False, 'RESEND_API_KEY': None,
+                      'RECEIPT_EMAIL_PROVIDER': 'resend'})
     reader = app.extensions['smartshop'].membership
     def send(kind, value):
         reader.on_message(None, None, SimpleNamespace(topic=reader.topic + kind, payload=json.dumps(value).encode(), retain=False))
