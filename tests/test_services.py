@@ -189,7 +189,9 @@ class ReplyTests(unittest.TestCase):
 
 class LifecycleTests(unittest.TestCase):
     def test_start_stop_restart_and_cleanup(self):
-        runtime = Runtime(load_config(), fan=Mock(fan_is_on=False))
+        config = {**load_config(), 'FRIDGE_SERVICES_ENABLED': True,
+                  'GMAIL_SERVICE_ENABLED': True, 'MEMBERSHIP_SERVICE_ENABLED': False}
+        runtime = Runtime(config, fan=Mock(fan_is_on=False))
         with patch.object(runtime.mqtt, 'start') as start, \
              patch.object(runtime.mqtt, 'stop') as stop, \
              patch.object(runtime.replies, 'run', side_effect=lambda event: event.wait()):
@@ -209,7 +211,9 @@ class LifecycleTests(unittest.TestCase):
         runtime.fan.cleanup.assert_called()
 
     def test_start_failure_cleans_up(self):
-        runtime = Runtime(load_config(), fan=Mock())
+        config = {**load_config(), 'FRIDGE_SERVICES_ENABLED': True,
+                  'MEMBERSHIP_SERVICE_ENABLED': False}
+        runtime = Runtime(config, fan=Mock())
         with patch.object(runtime.mqtt, 'start', side_effect=RuntimeError('failed')), \
              patch.object(runtime.mqtt, 'stop'):
             with self.assertRaises(RuntimeError):
