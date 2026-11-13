@@ -1,2 +1,4 @@
 -r requirements.txt
+pyserial>=3.5,<4
+evdev>=1.9,<2; sys_platform == "linux"
 RPi.GPIO>=0.7.1,<0.8; platform_machine == "aarch64" or platform_machine == "armv7l"

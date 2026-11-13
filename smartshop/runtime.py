@@ -7,14 +7,14 @@ from .services.fridge_monitor import FridgeMonitor
 from .services.mqtt import MqttService
 from .services.reply_reader import ReplyReader
 from .services.membership import MembershipReader
-from .hardware.product_reader import FakeReader, ProductReader
+from .hardware.product_reader import ProductReader, configured_adapter
 
 
 class Runtime:
     def __init__(self, config, *, fan=None):
         self.config = config
         self.membership = MembershipReader(config)
-        self.reader = ProductReader(FakeReader() if config.get('FAKE_READERS_ENABLED') else None)
+        self.reader = ProductReader(configured_adapter(config))
         self.checkout_lock = RLock()
         self.fan = fan if fan is not None else FanController()
         self.alerts = AlertSender(

@@ -10,7 +10,7 @@ from smartshop.models import Customer
 
 def main():
     app = create_app({'TESTING': True, 'SECRET_KEY': 'disposable-browser-fixture',
-                      'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:', 'FAKE_READERS_ENABLED': True,
+                      'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:', 'FAKE_READERS_ENABLED': True, 'PRODUCT_READER_BACKEND': 'disabled',
                       'FRIDGE_SERVICES_ENABLED': False, 'GMAIL_SERVICE_ENABLED': False,
                       'MEMBERSHIP_SERVICE_ENABLED': False, 'RESEND_API_KEY': None})
     reader = app.extensions['smartshop'].membership
