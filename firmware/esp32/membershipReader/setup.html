@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Membership reader · Raspberry Pi setup</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #20312e; background: #f3f6f4; line-height: 1.65; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 900px; margin: auto; padding: 40px 24px 72px; }
+    header { border-bottom: 3px solid #24705d; padding-bottom: 24px; }
+    h1, h2, h3 { line-height: 1.25; color: #143f34; }
+    h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 8px 0 16px; }
+    h2 { margin-top: 0; font-size: 1.5rem; }
+    h3 { font-size: 1.1rem; margin-top: 24px; }
+    .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; font-weight: 700; }
+    section { margin-top: 24px; padding: 24px; background: white; border: 1px solid #d9e3de; border-radius: 12px; }
+    a { color: #175e9b; text-underline-offset: 3px; }
+    nav ol { padding-left: 24px; }
+    code { font-family: ui-monospace, monospace; font-size: .92em; overflow-wrap: anywhere; }
+    p code, li code, td code { background: #edf3ef; padding: 2px 4px; border-radius: 3px; }
+    pre { background: #172e28; color: #f0f7f3; padding: 16px; border-radius: 8px; overflow-x: auto; line-height: 1.55; }
+    pre code { overflow-wrap: normal; }
+    .note { border-left: 4px solid #24705d; padding: 12px 16px; background: #edf6f0; }
+    .caution { border-left-color: #a76b15; background: #fff6e7; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #d9e3de; vertical-align: top; }
+    th { background: #edf3ef; }
+    footer { margin-top: 28px; font-size: .9rem; }
+    @media (max-width: 540px) { main { padding: 24px 12px 48px; } section { padding: 18px; } }
+    @media print { body, :root { background: white; } main { max-width: none; padding: 0; } section { border: 0; padding: 0; } pre { white-space: pre-wrap; overflow-wrap: anywhere; color: black; background: #eee; } nav { display: none; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">SmartShop · Hardware setup</p>
+    <h1>Flash the membership reader from a Raspberry Pi</h1>
+    <p>A step-by-step guide starting with an unflashed ESP32-WROOM-32E development board and ending with a live MQTT status message.</p>
+    <p class="note"><strong>Verified in this session:</strong> Python 3.13.5, PlatformIO Core 6.2.0, a successful firmware build and upload, and an <code>online:true</code> MQTT heartbeat. Physical RC522 card reading has not yet been tested.</p>
+  </header>
+
+  <nav aria-label="Setup steps">
+    <ol>
+      <li><a href="#prepare">Prepare the Pi and board</a></li>
+      <li><a href="#platformio">Install PlatformIO</a></li>
+      <li><a href="#broker">Check the MQTT broker</a></li>
+      <li><a href="#settings">Configure firmware settings</a></li>
+      <li><a href="#build">Build the firmware</a></li>
+      <li><a href="#upload">Upload to the ESP32</a></li>
+      <li><a href="#verify">Verify MQTT communication</a></li>
+      <li><a href="#wiring">Next step: connect the RC522</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+  </nav>
+
+  <section id="prepare">
+    <h2>1. Prepare the Pi and board</h2>
+    <p>You need a Raspberry Pi with a Terminal, an internet connection for tool downloads, this SmartShop repository, an ESP32 development board, and a <strong>USB data cable</strong>. A cable that only provides power cannot upload firmware.</p>
+    <p>The silver module on the tested board reads <strong>ESP32-WROOM-32E</strong>. The project uses PlatformIO's <code>esp32dev</code> board target. That target successfully built and uploaded in this session. Other board variants may require a different target or GPIO mapping.</p>
+    <p>Connect the ESP32 to the Pi by USB. The RC522 does not need to be connected for flashing or MQTT verification. Open Terminal and run these commands separately:</p>
+    <pre><code>python3 --version
+command -v pio
+ls /dev/ttyUSB* /dev/ttyACM*</code></pre>
+    <p>The tested Pi reported Python 3.13.5 and <code>/dev/ttyUSB0</code>. No output from <code>command -v pio</code> means PlatformIO is not on the current PATH. A missing <code>/dev/ttyACM*</code> is fine if a USB serial device is listed.</p>
+    <p>If multiple devices are listed, compare the list with the ESP32 unplugged and plugged in. Use its actual port in subsequent commands; <code>/dev/ttyUSB0</code> is the example verified here.</p>
+    <p>This guide assumes the repository is at <code>~/Projects/smartshop</code>. Adjust that path if your copy is elsewhere.</p>
+  </section>
+
+  <section id="platformio">
+    <h2>2. Install PlatformIO</h2>
+    <p>PlatformIO compiles the code and transfers it to the ESP32. Install it in a dedicated Python environment. Run each command separately and stop if a command fails:</p>
+    <pre><code>sudo apt update
+sudo apt install -y python3-venv
+python3 -m venv ~/platformio-venv
+source ~/platformio-venv/bin/activate
+python -m pip install --upgrade platformio
+pio --version</code></pre>
+    <p>The verified result was:</p>
+    <pre><code>PlatformIO Core, version 6.2.0</code></pre>
+    <p>Your prompt should now include <code>(platformio-venv)</code>. <strong>In every new terminal where you need <code>pio</code>, activate this environment again:</strong></p>
+    <pre><code>source ~/platformio-venv/bin/activate</code></pre>
+    <p>Installation reference: <a href="https://docs.platformio.org/en/latest/core/installation/methods/pypi.html">PlatformIO installation using pip</a>.</p>
+  </section>
+
+  <section id="broker">
+    <h2>3. Check the MQTT broker</h2>
+    <p>MQTT carries messages between the ESP32 and SmartShop. A broker, such as Mosquitto, must already be installed and running on the Pi. This session reused an existing broker; a new broker installation was not tested.</p>
+    <p>Inspect the running service and its configuration:</p>
+    <pre><code>sudo systemctl status mosquitto --no-pager
+sudo grep -RnE '^[[:space:]]*(listener|allow_anonymous|password_file|acl_file|include_dir)\b' /etc/mosquitto</code></pre>
+    <p>The existing broker used these settings:</p>
+    <pre><code>include_dir /etc/mosquitto/conf.d
+listener 1883 0.0.0.0
+allow_anonymous true</code></pre>
+    <p><code>listener 1883 0.0.0.0</code> listens on the Pi's IPv4 interfaces. <code>allow_anonymous true</code> permits clients without a username or password, so the tested firmware used empty MQTT credentials.</p>
+    <p class="note caution">This anonymous, unencrypted setup is for an initial test on a trusted LAN. Do not expose port 1883 to the internet. An authenticated broker requires an existing broker account; entering a password in the firmware does not create that account. This firmware uses plain MQTT, so changing the port alone does not enable TLS.</p>
+    <p>If Mosquitto is absent, inactive, or configured differently, resolve the broker setup before continuing. Do not overwrite an existing broker configuration just to match this example.</p>
+    <p>Find the Pi's network addresses:</p>
+    <pre><code>hostname -I</code></pre>
+    <p>Use the Pi's LAN address reachable from the ESP32's Wi-Fi network. If multiple addresses appear, select the address for that network. The ESP32 must not use <code>localhost</code>: on the ESP32, that would refer to itself.</p>
+  </section>
+
+  <section id="settings">
+    <h2>4. Configure firmware settings</h2>
+    <p>Go to the dedicated membership firmware folder. Copy the example without overwriting any existing local settings, then open the local file:</p>
+    <pre><code>cd ~/Projects/smartshop/firmware/esp32/membershipReader
+cp -n secrets.example.h secrets.h
+nano secrets.h</code></pre>
+    <p>For the anonymous broker configuration above, use the following structure. Replace the three placeholder values with your own Wi-Fi credentials and Pi LAN address. Keep the quotation marks.</p>
+    <pre><code>#pragma once
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define MQTT_HOST "YOUR_PI_LAN_IP"
+#define MQTT_PORT 1883
+#define MQTT_USER ""
+#define MQTT_PASSWORD ""
+#define MEMBERSHIP_TOPIC "SmartShop/membership"
+#define NTP_HOST "pool.ntp.org"</code></pre>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Setting</th><th scope="col">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>WIFI_SSID</code></td><td>The Wi-Fi network name the ESP32 will join.</td></tr>
+          <tr><td><code>WIFI_PASSWORD</code></td><td>That Wi-Fi network's password.</td></tr>
+          <tr><td><code>MQTT_HOST</code></td><td>The Pi's LAN IP address, as a quoted string.</td></tr>
+          <tr><td><code>MQTT_PORT</code></td><td><code>1883</code>, without quotation marks, for this broker's plain MQTT listener.</td></tr>
+          <tr><td><code>MQTT_USER</code> / <code>MQTT_PASSWORD</code></td><td>Both empty strings for the tested anonymous broker. For an authenticated broker, use its configured account credentials, which are separate from your Pi login.</td></tr>
+          <tr><td><code>MEMBERSHIP_TOPIC</code></td><td>Keep <code>SmartShop/membership</code>; the backend and monitoring commands must use the same prefix.</td></tr>
+          <tr><td><code>NTP_HOST</code></td><td>A reachable time server. The firmware needs synchronized time before it will accept scan commands.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>In nano, save with <strong>Ctrl+O</strong>, press <strong>Enter</strong>, then exit with <strong>Ctrl+X</strong>. Keep <code>secrets.h</code> local and uncommitted. Do not publish its contents.</p>
+  </section>
+
+  <section id="build">
+    <h2>5. Build the firmware</h2>
+    <p>From the <code>membershipReader</code> directory, with the PlatformIO environment activated:</p>
+    <pre><code>pio run</code></pre>
+    <p>The first build downloads the ESP32 toolchain and required libraries, so it may take several minutes. This project pins the following dependencies in <code>platformio.ini</code>:</p>
+    <ul>
+      <li>Target: <code>esp32dev</code>; framework: Arduino.</li>
+      <li>ESP32 platform: <code>espressif32@6.12.0</code>.</li>
+      <li>MFRC522 <code>1.4.12</code>, PubSubClient <code>2.8</code>, ArduinoJson <code>7.4.2</code>.</li>
+    </ul>
+    <p>A successful build ends with output similar to:</p>
+    <pre><code>Successfully created esp32 image.
+... [SUCCESS] ...</code></pre>
+    <p><strong>This only creates the firmware image on the Pi.</strong> It has not yet changed the code running on the ESP32.</p>
+  </section>
+
+  <section id="upload">
+    <h2>6. Upload to the ESP32</h2>
+    <p>Keep the board connected by USB. Close any serial monitor using its port, then run:</p>
+    <pre><code>pio run -t upload --upload-port /dev/ttyUSB0</code></pre>
+    <p>If it remains at <code>Connecting...</code>, hold the board's <strong>BOOT</strong> button until uploading begins, then release it.</p>
+    <p>The verified upload ended with:</p>
+    <pre><code>Hash of data verified.
+Leaving...
+Hard resetting via RTS pin...
+... [SUCCESS] ...</code></pre>
+    <p>The firmware is now stored on the ESP32. It starts after the upload reset and will run again whenever the board receives power. It does not require PlatformIO to remain open.</p>
+    <p>If you change <code>secrets.h</code> later, repeat the upload command to compile and install the new settings.</p>
+  </section>
+
+  <section id="verify">
+    <h2>7. Verify MQTT communication</h2>
+    <p>On the Pi, subscribe to the reader's status topic:</p>
+    <pre><code>mosquitto_sub -h localhost -p 1883 \
+  -t 'SmartShop/membership/status' -v</code></pre>
+    <p>Here, <code>localhost</code> is correct because this command runs on the Pi where the broker is running.</p>
+    <p>If the command is missing, install the MQTT client tools, then retry:</p>
+    <pre><code>sudo apt install -y mosquitto-clients</code></pre>
+    <p>Within a few seconds, expect a message similar to this, repeating about every five seconds:</p>
+    <pre><code>SmartShop/membership/status {"v":1,"online":true,"reader_epoch":"..."}</code></pre>
+    <p>The actual <code>reader_epoch</code> is a randomly generated connection identifier. It changes when the reader reconnects; do not configure or copy it into your settings.</p>
+    <p>Wait about 15 seconds, then press <strong>Ctrl+C</strong> to stop the subscriber. Stopping it does not stop the ESP32 or broker.</p>
+    <p class="note"><strong>Success:</strong> a live <code>online:true</code> message confirms the ESP32 is running, joined Wi-Fi, and reached the MQTT broker. It does not establish that the RC522 can read a card or that NTP time synchronization has completed.</p>
+    <h3>Optional serial monitor</h3>
+    <pre><code>pio device monitor --port /dev/ttyUSB0 --baud 115200</code></pre>
+    <p>Exit the PlatformIO serial monitor with <strong>Ctrl+C</strong>. The firmware reports Wi-Fi connection status, its local IP, the MQTT destination, and failed MQTT connection state codes. Press the board's EN/reset button while monitoring to see startup messages again. It prints <code>Armed: remove any card, then present a card.</code> after accepting a scan command, and <code>UID: ...</code> after reading a card.</p>
+  </section>
+
+  <section id="wiring">
+    <h2>8. Next step: connect the RC522</h2>
+    <p><strong>Not yet physically verified in this session.</strong> The following wiring matches the firmware. Unplug USB power before connecting or changing wires.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">RC522 pin</th><th scope="col">ESP32 connection</th></tr></thead>
+        <tbody>
+          <tr><td>VCC / 3.3V</td><td><strong>3V3 (3.3 V)</strong></td></tr>
+          <tr><td>GND</td><td>GND</td></tr>
+          <tr><td>RST</td><td>GPIO 4</td></tr>
+          <tr><td>SDA / SS</td><td>GPIO 5</td></tr>
+          <tr><td>SCK</td><td>GPIO 18</td></tr>
+          <tr><td>MISO</td><td>GPIO 19</td></tr>
+          <tr><td>MOSI</td><td>GPIO 23</td></tr>
+          <tr><td>IRQ</td><td>Leave unconnected</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note caution">Use GPIO numbers, not header positions. Check your board's labels. Supply the RC522 with <strong>3.3 V, not 5 V/VIN</strong>, and share GND. The RC522's SDA pin is SPI chip select in this setup.</p>
+    <p>Inspect all connections before reconnecting USB. A card will only be read after a backend command arms the reader. A card already resting on the reader must be removed and presented again after arming; the scan window is 60 seconds.</p>
+    <p>Continue with the membership diagnostic in <a href="../../../setup.md#6-check-membership-communication-on-the-pi">the repository hardware setup guide</a> (a Markdown file). Run the diagnostic with the SmartShop app stopped, then compare its UID with the ESP32 serial output. Enrollment is a later, separate check.</p>
+  </section>
+
+  <section id="troubleshooting">
+    <h2>Troubleshooting</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Symptom</th><th scope="col">What to check</th></tr></thead>
+        <tbody>
+          <tr><td><code>pio: command not found</code></td><td>Run <code>source ~/platformio-venv/bin/activate</code> in this terminal.</td></tr>
+          <tr><td>No USB serial device</td><td>Check the USB data cable and connection; compare port listings before and after plugging in the board.</td></tr>
+          <tr><td>Upload says port is busy</td><td>Close serial monitors and other programs using the port.</td></tr>
+          <tr><td>Upload says permission denied</td><td>Check <code>ls -l /dev/ttyUSB0</code> and <code>groups</code>. On a Pi where the device belongs to <code>dialout</code>, add your user with <code>sudo usermod -aG dialout "$USER"</code>, then log out and back in. Reactivate the PlatformIO environment afterward.</td></tr>
+          <tr><td>Upload remains at Connecting</td><td>Hold BOOT until writing begins, then release it. Confirm the correct board and port.</td></tr>
+          <tr><td>MQTT subscriber says connection refused</td><td>Check that Mosquitto is running and listening on port 1883.</td></tr>
+          <tr><td>No status messages</td><td>Check Wi-Fi credentials, the Pi's LAN address, network reachability, broker access rules, and the exact topic prefix. Ensure you uploaded after changing settings.</td></tr>
+          <tr><td>Serial monitor is quiet</td><td>After a successful connection it can be quiet until arming. Press EN/reset to see startup diagnostics, and use MQTT status messages to check connectivity.</td></tr>
+          <tr><td>Online but will not arm or read</td><td>Physical reading is a separate test. Check backend commands, topic permissions, NTP access, wiring, and removal/re-presentation after arming.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <footer>Session milestone: firmware built, uploaded, and MQTT heartbeat received. No real credentials are included in this guide.</footer>
+</main>
+</body>
+</html>

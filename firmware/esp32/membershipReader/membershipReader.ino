@@ -19,6 +19,8 @@ PubSubClient mqtt(network);
 String epoch, operation, lastOperation, purpose;
 unsigned long armedAt = 0, absentSince = 0, nextConnect = 0, heartbeatAt = 0, lastRead = 0;
 bool fresh = false;
+bool wifiReported = false;
+unsigned long wifiLogAt = 0;
 time_t operationExpires = 0;
 
 String randomId() {
@@ -59,6 +61,7 @@ void command(char* topic, byte* payload, unsigned int length) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Membership reader starting. Connecting to Wi-Fi...");
   SPI.begin(18, 19, 23, 5);
   rfid.PCD_Init();
   WiFi.mode(WIFI_STA);
@@ -73,7 +76,20 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
-  if (WiFi.status() != WL_CONNECTED) { clearArm(); return; }
+  if (WiFi.status() != WL_CONNECTED) {
+    clearArm();
+    if (wifiReported || now - wifiLogAt >= 5000) {
+      Serial.printf("Wi-Fi not connected (status %d). Check network settings and signal.\n", (int)WiFi.status());
+      wifiLogAt = now;
+    }
+    wifiReported = false;
+    return;
+  }
+  if (!wifiReported) {
+    Serial.print("Wi-Fi connected. ESP32 IP: ");
+    Serial.println(WiFi.localIP());
+    wifiReported = true;
+  }
   if (!mqtt.connected()) {
     clearArm();
     if ((long)(now - nextConnect) < 0) return;
@@ -83,14 +99,21 @@ void loop() {
     will["v"] = 1; will["online"] = false; will["reader_epoch"] = epoch;
     String payload; serializeJson(will, payload);
     String clientId = "membership-" + String((unsigned long)ESP.getEfuseMac(), HEX);
+    Serial.printf("Connecting to MQTT at %s:%d...\n", MQTT_HOST, MQTT_PORT);
     if (mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD,
                      MEMBERSHIP_TOPIC "/status", 0, false, payload.c_str(), true)) {
       mqtt.subscribe(MEMBERSHIP_TOPIC "/command", 1);
       status(true); heartbeatAt = now;
+      Serial.println("MQTT connected. Status heartbeat active on " MEMBERSHIP_TOPIC "/status");
+    } else {
+      Serial.printf("MQTT connection failed (state %d). Retrying.\n", mqtt.state());
     }
     return;
   }
   mqtt.loop();
+  // The MQTT callback can arm a scan using a later millis() value. Refresh
+  // before unsigned elapsed-time checks so a new arm cannot look expired.
+  now = millis();
   if (now - heartbeatAt >= 5000) { status(true); heartbeatAt = now; }
   if (!operation.length()) return;
   if (now - armedAt >= 60000 || time(nullptr) >= operationExpires) { clearArm(); return; }
