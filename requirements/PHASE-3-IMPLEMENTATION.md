@@ -1,3 +1,11 @@
+> **2026-11-12 CF600 update:** The SDK archive and target Pi are now available.
+> CDC-COM serial inventory is confirmed on the Pi; the serial adapter validates
+> binary frames/CRC and reads EPCs for registration/checkout. The earlier HID
+> assumption was rejected after no keyboard events were observed. Four-tag physical inventory and real product mappings remain unverified.
+> Historical checklist entries below describe the previous handoff; see
+> [current setup](../README.md#reader-and-email-deployment) and
+> [project index](../docs/project-index.md).
+
 # Phase 3 implementation guide
 
 Source: [Phase-3.pdf](Phase-3.pdf). This guide breaks the assignment into

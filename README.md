@@ -64,15 +64,21 @@ only. Forms and polling mutations require CSRF tokens. Use HTTPS and
    with Enter handled as a field terminator. Its actual device remains unverified.
 2. Receive positive stock quantities with a date, repeatedly if needed.
    Registration alone never adds stock. Receptions are preserved in history.
-3. Open `/checkout`, start a cart and arm the product reader. Fake mode exposes
-   a clearly labeled development EPC input; it is disabled by default.
-4. Review the list. Each distinct reusable product tag adds one unit. Removing
-   a product suppresses subsequent observations until explicitly added back.
+3. Open `/checkout` and start a cart. Scan a barcode into the UPC field; Enter
+   or Tab submits it, or click Add barcode. Each deliberate barcode scan adds
+   one unit. Barcode checkout works without arming the RFID reader. Alternatively,
+   arm the product reader to collect multiple RFID tags. Fake mode exposes a
+   development EPC input; it is disabled by default.
+4. Each distinct reusable RFID tag adds one unit once. Repeated RFID reports
+   preserve the current quantity. Use +/− to adjust units up to available stock;
+   decreasing to zero removes the line. Removing a product suppresses RFID
+   reappearance until Add back or an explicit barcode scan. Barcode and RFID
+   observations of the same product share one cart line.
 5. Optionally scan a linked membership card, refresh the result and explicitly
    confirm the membership. Otherwise continue as a guest. A signed-in browser
    does not automatically attach its account to a purchase.
 6. Review and simulate success, failure or cancellation. No real payment
-   credentials are requested. Success atomically saves snapshots, deducts stock
+   credentials are requested. Success atomically saves quantities and price snapshots, deducts the purchased stock
    and awards floor(total CAD) points to a confirmed member. Guests earn zero.
    If price/stock changes, refresh the review before trying payment again.
 7. View the saved receipt. Members see their purchase history and points in
@@ -111,12 +117,66 @@ EPCs**, not the photographed production tag values.
 
 ## Reader and email deployment
 
-The CF600 SDK is absent. `smartshop/hardware/product_reader.py` provides an
-adapter boundary, exclusive owned scans, expiration and a fake reader. The real
-transport is deliberately unavailable until the Omnivox sample is supplied and
-run on the target Pi. Record its OS/architecture, transport and all-four-tag
-output, then implement the adapter's `start`, `poll`, `stop` methods. Do not
-claim simultaneous physical scanning from the fake-reader demonstration.
+The attached CF600 uses **CDC-COM serial mode**, as specified by the teacher.
+Select that mode in the reader configuration software. On this Pi, load the
+USB serial driver (requires local administrator access):
+
+```sh
+sudo modprobe usbserial vendor=0x0483 product=0x5750
+ls -l /dev/ttyUSB* /dev/serial/by-id/
+```
+
+Install `requirements-pi.txt` in the application environment and configure:
+
+```dotenv
+FAKE_READERS_ENABLED=false
+PRODUCT_READER_BACKEND=cf600_serial
+CF600_SERIAL_DEVICE=/dev/serial/by-id/usb-CFUSB_HID_By_YLW28-if03-port0
+CF600_BAUDRATE=57600
+```
+
+Use the stable path rather than `/dev/ttyUSB0`, whose number can change. The
+service user needs serial access, normally through the `dialout` group. The
+current user already has it. Restart the app after changing `.env`. A module
+loaded manually may need loading again after reboot; check the port first.
+
+The attached reader emits binary inventory frames in its configured scanning
+mode. The adapter passively reads them, validates framing/CRC/status/EPC length,
+and preserves leading zeros. It sends **no commands or tag writes**. Observed
+framing matches the [CF-header inventory protocol](https://electron.id/protocol/el-uhf-rc4-protocol/),
+including CRC-16 (preset FFFF, reflected polynomial 8408, high byte first).
+This is distinct from the older UHFReader18 protocol in the local SDK archive.
+57600 is the baud setting used during the successful capture on this device;
+it is configurable for readers with different settings.
+
+Only an armed scan opens the serial port, with an exclusive process lock.
+Cancellation, independent 60-second expiry, disconnect, overflow and application
+shutdown close it. A disconnected or expired scan requires rearming. Keep one
+serving process. Stop a web scan before using the diagnostic:
+
+```sh
+python -m scripts.scan_products --hardware --seconds 15
+# Override a different deployment's serial path if necessary:
+python -m scripts.scan_products --hardware --device /dev/serial/by-id/YOUR_READER --seconds 15
+```
+
+Present each tag separately, then all four together. Capture one EPC in product
+registration, save actual metadata and receive stock. In checkout, start a scan
+and present the tags; the browser updates automatically and repeated EPCs add no
+quantity. The registration screen shows its waiting state and prevents duplicate
+polling loops. Multiple tags require stopping and restarting capture with only
+the intended tag present; an ambiguous capture clears the EPC field.
+
+A real, checksum-valid serial capture identified `A00000000000000000004965`.
+Other full EPCs, all-four simultaneous inventory and physical checkout still
+need verification; no production product records are seeded from this capture.
+See the [project index](docs/project-index.md) and [verification notes](docs/phase3-verification.md).
+
+The optional `cf600_hid` backend remains for readers explicitly configured to
+emit keyboard events, separated by Tab, using `CF600_INPUT_DEVICE`. The attached
+reader emitted no keyboard events during testing, so use `cf600_serial` here.
+The diagnostic selects serial by default; use `--backend cf600_hid` only for a
+verified keyboard-mode reader.
 
 Membership firmware is in `firmware/esp32/membershipReader/`. Copy its
 `secrets.example.h` to ignored `secrets.h`. Wiring: RC522 3.3V/GND, RST4,
@@ -146,13 +206,45 @@ requires login, an unassigned card and explicit confirmation; replacing a card
 requires the replacement checkbox. One reader serves one operation at a time.
 Remove a card already on the reader, then present it after arming.
 
-Receipts use `RESEND_API_KEY` and a separate verified `RECEIPT_FROM`. They go to
-the confirmed member's saved email, never `ALERT_TO`. Delivery occurs after
-committing the sale. Failures leave the purchase intact and mark delivery
-`failed`; the receipt page offers retry. A `sending` attempt can be reclaimed
-after five minutes. Provider requests use a stable purchase idempotency key;
-check provider logs before retrying an ambiguous timeout outside its retention
-window. No live customer emails were sent during automated tests.
+Checkout receipts support Gmail SMTP and Resend. Both send to the confirmed
+member's saved email, never `ALERT_TO`; guests receive an on-screen receipt only.
+Delivery occurs after the sale commits. No network connection starts during
+application construction.
+
+For Gmail, enable Google 2-Step Verification and create an app password at
+[Google App Passwords](https://myaccount.google.com/apppasswords). Some managed
+accounts, Advanced Protection and security-key-only setups do not offer app
+passwords; see [Google's account guide](https://support.google.com/accounts/answer/185833).
+Set these in local `.env`, replacing existing entries rather than duplicating:
+
+```dotenv
+RECEIPT_EMAIL_PROVIDER=gmail
+GMAIL_ADDRESS=your-sender@gmail.com
+GMAIL_APP_PASSWORD=your_16_character_app_password
+```
+
+Use the generated app password, not your normal Google password. Formatting
+spaces in the app password are removed for SMTP login. Restart the app, then
+complete a purchase with a linked membership card and explicitly confirm it at
+checkout. Check the receipt status and recipient inbox/spam folder. A successful
+SMTP submission means Gmail accepted the message, not that inbox delivery has
+been independently verified. Gmail sends from the authenticated `GMAIL_ADDRESS`
+over certificate-validated TLS to `smtp.gmail.com:465`. Gmail receipts do not use
+`RECEIPT_FROM` or `RESEND_API_KEY`. `GMAIL_SERVICE_ENABLED` controls incoming
+fridge reply polling independently; it need not be enabled to send receipts.
+These credentials are shared with the reply reader if that service is enabled.
+No additional Python dependency is required.
+
+For Resend, select `RECEIPT_EMAIL_PROVIDER=resend` (the default) and provide
+`RESEND_API_KEY` plus a verified `RECEIPT_FROM`. Existing fridge alerts continue
+to use their own Resend configuration regardless of the receipt provider.
+
+Failures preserve the purchase and mark delivery `failed`; the receipt page
+provides retry. A `sending` attempt can be reclaimed after five minutes. Resend
+uses a stable provider idempotency key; Gmail uses a stable Message-ID but SMTP
+has no equivalent deduplication guarantee. Check Gmail Sent mail before retrying
+an ambiguous timeout, which could otherwise duplicate the email. Successful
+receipts are not resent. No live customer emails were sent during tests.
 
 ## Service lifecycle and refrigerator hardware
 
