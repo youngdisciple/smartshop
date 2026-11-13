@@ -14,7 +14,8 @@
   <aside class="sidebar">
     <a class="brand" href="{{ url_for('shop.checkout_start') }}">SmartShop<span>{{ _('Store management') }}</span></a>
     <nav aria-label="{{ _('Main navigation') }}">
-      {% set links = [('shop.checkout_start', 'Checkout'), ('dashboard.index', 'Refrigerators')] %}
+      {% set links = [('shop.checkout_start', 'Checkout')] %}
+      {% if not g.customer or g.customer.is_admin %}{% set links = links + [('dashboard.index', 'Refrigerators')] %}{% endif %}
       {% if g.customer %}
         {% set links = links + [('shop.account', 'My account')] %}
         {% if g.customer.is_admin %}{% set links = links + [('shop.products', 'Products'), ('admin.index_customer', 'Customers')] %}{% endif %}
