@@ -22,7 +22,7 @@ async function call(url) {
     return {error: statusNode.dataset.connection};
   }
 }
-document.querySelector('#lookup-upc').addEventListener('click', async () => {
+document.querySelector('#lookup-upc')?.addEventListener('click', async () => {
   const input = document.querySelector('#upc');
   const value = input.value.trim();
   if (!value) {
@@ -33,7 +33,7 @@ document.querySelector('#lookup-upc').addEventListener('click', async () => {
   const response = await fetch('/products/lookup?upc=' + encodeURIComponent(value));
   const data = await response.json(); statusNode.textContent = data.error || data.name + ' · ' + (data.price_cents / 100).toFixed(2) + ' CAD';
 });
-document.querySelector('#upc').addEventListener('keydown', event => {
+document.querySelector('#upc')?.addEventListener('keydown', event => {
   if (event.key === 'Enter') { event.preventDefault(); document.querySelector('#epc').focus(); }
 });
 async function poll(scanGeneration) {

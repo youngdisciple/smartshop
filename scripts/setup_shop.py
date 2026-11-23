@@ -4,7 +4,7 @@ import json
 from smartshop import create_app
 from smartshop.extensions import db
 from smartshop.models import Customer, Product
-from smartshop.services.catalog import product_values
+from smartshop.services.catalog import product_values, validate_catalog_epc
 from smartshop.services.migrations import migrate
 
 SUFFIXES = ['4965', '4970', '4968', '4951']
@@ -28,6 +28,7 @@ def seed_verified(path):
                 if any(getattr(existing, key) != value for key, value in row.items()):
                     raise ValueError('Existing mapping differs; use product administration to edit')
             else:
+                validate_catalog_epc(row['epc'])
                 db.session.add(Product(**row))
         db.session.commit()
     except Exception:
@@ -51,7 +52,7 @@ def main():
             db.session.commit()
         if args.verified_products:
             seed_verified(args.verified_products)
-    print('Schema/setup complete; no stock is added by tag registration.')
+    print('Schema/setup complete. Each new product starts with one registered EPC in stock.')
 
 
 if __name__ == '__main__':

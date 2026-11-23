@@ -207,7 +207,7 @@ class LifecycleTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
-    def test_hid_registration_checkout_removal_cancel_and_reuse(self):
+    def test_hid_registration_checkout_removal_cancel_and_sold_tags(self):
         from tests.test_phase3 import ShopTests
         from smartshop.models import Product, Purchase
         from smartshop.extensions import db
@@ -227,15 +227,18 @@ class WorkflowTests(unittest.TestCase):
         fixture.post('/reader/product/cancel')
         self.assertIsNone(fixture.runtime.reader.operation)
         for expected_stock in (2, 1):
+            tags = fixture.tags if expected_stock == 2 else [f'AB{index:02X}02' for index in range(4)]
             path = fixture.new_cart()
             fixture.post(path, {'action': 'scan'})
-            feed_batch(device, sum((events(tag) for tag in fixture.tags + fixture.tags[:1] + ['00AA']), []))
+            feed_batch(device, sum((events(tag) for tag in tags + fixture.tags[:1] + ['00AA']), []))
             response = fixture.post(path + '/poll')
             self.assertEqual(len(response.json['items']), 4)
             self.assertIn('Unknown product tag', response.json['messages'])
+            if expected_stock == 1:
+                self.assertIn('RFID unit already sold', response.json['messages'])
             self.assertEqual(response.json['total_cents'], 1100)
             fixture.post(path, {'action': 'remove', 'product_id': '1'})
-            feed_batch(device, events(fixture.tags[0]))
+            feed_batch(device, events(tags[0]))
             self.assertEqual(len(fixture.post(path + '/poll').json['items']), 3)
             fixture.post(path, {'action': 'restore', 'product_id': '1'})
             fixture.ready(path)

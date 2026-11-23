@@ -1,7 +1,8 @@
 """Barcode checkout, deliberate quantity edits and transactional stock checks."""
+from datetime import date
 import unittest
 from smartshop.extensions import db
-from smartshop.models import Checkout, Customer, MembershipCard, Product, Purchase
+from smartshop.models import Checkout, Customer, MembershipCard, Product, ProductTag, Purchase, SoldProductUnit
 
 
 class QuantityCheckoutTests(unittest.TestCase):
@@ -53,6 +54,93 @@ class QuantityCheckoutTests(unittest.TestCase):
         self.edit('remove')
         self.edit('restore')
         self.assertEqual(self.cart.items[0]['quantity'], 1)
+
+    def test_existing_product_gets_numbered_rfid_units(self):
+        url = '/products/1/rfid'
+        self.assertEqual(self.shop.client.get(url).status_code, 302)
+        self.shop.login('admin@example.com')
+        product = db.session.get(Product, 1)
+        product.name = 'Banana'
+        db.session.commit()
+        self.assertIn(b'Banana#1', self.shop.client.get(url).data)
+        self.post('/reader/product/start')
+        self.post('/reader/fake', {'tags': '00bb'})
+        captured, = self.post('/reader/product/result').json['tags']
+        for code in (captured, '00CC'):
+            self.assertEqual(self.post(url, {'epc': code}).location, url)
+        self.assertIn(b'Banana#5', self.shop.client.get(url).data)
+        self.assertIn(b'UPC or EPC already exists', self.post('/products/2/rfid', {'epc': '00bb'}).data)
+        self.assertIn(b'UPC or EPC already exists', self.post(url, {'epc': product.epc}).data)
+        self.assertEqual(ProductTag.query.filter_by(product_id=1).count(), 4)
+        unit = db.session.get(ProductTag, '00BB')
+        self.assertEqual(unit.added_on, date.today())
+        inventory = self.shop.client.get('/inventory/1').get_data(as_text=True)
+        self.assertRegex(inventory, rf'Banana#4</th><td><code>00BB</code></td>\s*<td><time datetime="{unit.added_on}">')
+        self.assertEqual(product.stock, 5)
+
+        self.path = self.shop.new_cart()
+        self.post(self.path, {'action': 'scan'})
+        self.post('/reader/fake', {'tags': '00BB 00CC 00BB'})
+        item, = self.post(self.path + '/poll').json['items']
+        self.assertEqual(item['rfid_serials'], [4, 5])
+        self.assertEqual(item['quantity'], 2)
+        self.assertIn(b'Banana#4, Banana#5', self.shop.client.get(self.path).data)
+        self.edit('decrease')
+        item, = self.post(self.path + '/poll').json['items']
+        self.assertEqual(item['rfid_serials'], [4])
+        self.assertEqual(item['quantity'], 1)
+        self.edit('remove')
+        self.edit('restore')
+        self.assertEqual(self.post(self.path + '/poll').json['items'][0]['rfid_serials'], [4])
+        self.shop.ready(self.path)
+        self.post(self.path + '/payment', {'outcome': 'success'})
+        self.assertEqual(Purchase.query.one().items[0].quantity, 1)
+        self.assertEqual(product.stock, 4)
+        self.assertRegex(self.shop.client.get(url).get_data(as_text=True), r'Banana#4</th>[^\n]*\s*<td>Sold</td>')
+        self.assertNotIn(b'Banana#4', self.shop.client.get('/inventory/1').data)
+
+    def test_admin_removes_primary_and_extra_rfid_units_from_stock(self):
+        url = '/products/1/rfid'
+        self.assertEqual(self.post(f'{url}/1/remove').status_code, 302)
+        self.shop.login('admin@example.com')
+        page = self.shop.client.get(url).data
+        self.assertIn(b'/products/1/rfid/1/remove', page)
+        self.assertIn(b'/products/1/rfid/2/remove', page)
+        path = self.shop.new_cart()
+        self.post(path, {'action': 'scan'})
+        self.post('/reader/fake', {'tags': 'AB0002'})
+        self.assertEqual(self.post(path + '/poll').json['items'][0]['rfid_serials'], [2])
+        self.shop.ready(path)
+
+        for serial in (1, 2, 2, 999):
+            self.assertEqual(self.post(f'{url}/{serial}/remove').location, url)
+        self.assertEqual(db.session.get(Product, 1).stock, 1)
+        page = self.shop.client.get(url).data
+        self.assertNotIn(b'#1</th>', page)
+        self.assertNotIn(b'#2</th>', page)
+        self.assertNotIn(b'AB0002', page)
+        self.assertNotIn(b'/products/1/rfid/2/remove', page)
+        self.post(path + '/payment', {'outcome': 'success'})
+        self.assertEqual(Purchase.query.count(), 0)
+        self.assertEqual(db.session.get(Product, 1).stock, 1)
+
+        self.path = self.shop.new_cart()
+        self.post(self.path, {'action': 'scan'})
+        self.post('/reader/fake', {'tags': f'{self.shop.tags[0]} AB0002'})
+        result = self.post(self.path + '/poll').json
+        self.assertEqual(result['items'], [])
+        self.assertIn('Unknown product tag', result['messages'])
+        self.barcode()
+        self.shop.ready(self.path)
+        self.post(self.path + '/payment', {'outcome': 'success'})
+        self.assertEqual(SoldProductUnit.query.one().serial, 3)
+        self.assertEqual(db.session.get(Product, 1).stock, 0)
+        for code in (self.shop.tags[0], 'AB0002'):
+            self.assertEqual(self.post(url, {'epc': code}).location, url)
+        self.assertEqual(db.session.get(Product, 1).stock, 2)
+        units = ProductTag.query.filter_by(product_id=1).order_by(ProductTag.serial).all()
+        self.assertEqual([(unit.epc, unit.serial) for unit in units[-2:]], [(self.shop.tags[0], 4), ('AB0002', 5)])
+        self.assertNotIn(b'name="epc"', self.shop.client.get('/products/1/edit').data)
 
     def test_validation_stock_limits_archived_and_owner_guards(self):
         for code, message in (('', b'Invalid UPC'), ('ABC123', b'Invalid UPC'),

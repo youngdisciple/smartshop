@@ -23,6 +23,11 @@ async function poll() {
         const labels = JSON.parse(itemsNode.dataset.labels);
         for (const [index, text] of [item.name, String(item.quantity), (item.unit_cents / 100).toFixed(2) + ' CAD', (item.unit_cents * item.quantity / 100).toFixed(2) + ' CAD'].entries()) {
           const cell = document.createElement('td'); cell.textContent = text; cell.dataset.label = labels[index]; row.append(cell);
+          if (index === 0 && item.rfid_serials?.length) {
+            const units = document.createElement('small');
+            units.textContent = item.rfid_serials.map(serial => item.name + '#' + serial).join(', ');
+            cell.append(document.createElement('br'), units);
+          }
         }
         const cell = document.createElement('td');
         const form = document.createElement('form'); form.method = 'post';

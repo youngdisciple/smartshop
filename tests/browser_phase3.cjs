@@ -1,9 +1,6 @@
 // Optional browser verification: NODE_PATH=/path/to/node_modules node tests/browser_phase3.cjs
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
-// Reception validation uses the server's local calendar date.
-const now = new Date();
-const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map(value => String(value).padStart(2, '0')).join('-');
 const suffixes = ['4965', '4970', '4968', '4951'];
 const tags = suffixes.map(suffix => 'DE' + '0'.repeat(18) + suffix); // synthetic, never physical EPC evidence
 (async () => {
@@ -27,7 +24,11 @@ const tags = suffixes.map(suffix => 'DE' + '0'.repeat(18) + suffix); // syntheti
       await goto('/products/new');
       for (const [name, value] of Object.entries({name: `Development product ${i + 1}`, category: 'Development', producer: 'Fixture', price: '1.25', upc: '000000000000' + i, epc: tags[i]})) await fill(name, value);
       await click('Save product');
-      await goto('/inventory/' + (i + 1)); await fill('quantity', '3'); await fill('received_on', today); await click('Receive stock');
+      await goto('/products/' + (i + 1) + '/rfid');
+      for (const serial of [2, 3]) {
+        await fill('epc', 'AB0' + i + '0' + serial);
+        await click('Add RFID unit');
+      }
     }
     await goto('/products');
     await page.screenshot({path: '/tmp/smartshop-products-desktop.png', fullPage: true});
@@ -90,6 +91,6 @@ const tags = suffixes.map(suffix => 'DE' + '0'.repeat(18) + suffix); // syntheti
     assert.equal(await page.getByRole('heading', {name: 'Mon compte'}).count(), 1);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
-    console.log('Browser flow passed: product reception, enrollment, RFID deduplication, barcode Enter/Tab, quantity controls, mixed scans, payment, receipts/history, French, desktop/mobile overflow.');
+    console.log('Browser flow passed: RFID inventory, enrollment, RFID deduplication, barcode Enter/Tab, quantity controls, mixed scans, payment, receipts/history, French, desktop/mobile overflow.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

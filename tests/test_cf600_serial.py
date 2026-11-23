@@ -150,7 +150,7 @@ class SerialAdapterTests(unittest.TestCase):
 
 
 class SerialWorkflowTests(unittest.TestCase):
-    def test_serial_registration_and_checkout_reuse(self):
+    def test_serial_registration_and_checkout_with_sold_tags(self):
         from tests.test_phase3 import ShopTests
         from smartshop.hardware.product_reader import ProductReader
         from smartshop.models import Product, Purchase
@@ -170,14 +170,17 @@ class SerialWorkflowTests(unittest.TestCase):
         self.assertEqual(fixture.post('/reader/product/result').json['tags'], [fixture.tags[0]])
         fixture.post('/reader/product/cancel')
         for stock in (2, 1):
+            tags = fixture.tags if stock == 2 else [f'AB{index:02X}02' for index in range(4)]
             path = fixture.new_cart()
             fixture.post(path, {'action': 'scan'})
-            port.feed(b''.join(packet(tag) for tag in fixture.tags + fixture.tags[:1]))
+            port.feed(b''.join(packet(tag) for tag in tags + fixture.tags[:1]))
             response = fixture.post(path + '/poll')
             self.assertEqual(len(response.json['items']), 4)
             self.assertEqual(response.json['total_cents'], 1100)
+            if stock == 1:
+                self.assertIn('RFID unit already sold', response.json['messages'])
             fixture.post(path, {'action': 'remove', 'product_id': '1'})
-            port.feed(packet(fixture.tags[0]))
+            port.feed(packet(tags[0]))
             self.assertEqual(len(fixture.post(path + '/poll').json['items']), 3)
             fixture.post(path, {'action': 'restore', 'product_id': '1'})
             fixture.ready(path)

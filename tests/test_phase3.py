@@ -12,10 +12,9 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.security import generate_password_hash
 from smartshop import create_app
 from smartshop.extensions import db
-from smartshop.models import Checkout, Customer, MembershipCard, Product, Purchase, Reception
+from smartshop.models import Checkout, Customer, MembershipCard, Product, ProductTag, Purchase, Reception, RemovedProductUnit
 from smartshop.hardware.product_reader import FakeReader, ProductReader
 from smartshop.services.membership import MembershipReader, normalize_uid
-from smartshop.services.catalog import receive
 from smartshop.services.checkout import add_tags, finalize, review
 from smartshop.services.migrations import migrate
 from smartshop.services.receipts import deliver, receipt_text
@@ -38,11 +37,14 @@ class ShopTests(unittest.TestCase):
         # Explicit synthetic identifiers; never persisted into an operator DB.
         self.tags = ['DE' + '0' * 18 + suffix for suffix in ('4965', '4970', '4968', '4951')]
         for index, tag in enumerate(self.tags):
-            db.session.add(Product(name=f'Development product {index + 1}', category='Development', producer='Fixture',
-                                   upc=f'000000000000{index}', epc=tag, price_cents=125 + index * 100, stock=0))
+            product = Product(name=f'Development product {index + 1}', category='Development', producer='Fixture',
+                              upc=f'000000000000{index}', epc=tag, price_cents=125 + index * 100, stock=3)
+            product.rfid_units = [ProductTag(epc=f'AB{index:02X}{serial:02X}', serial=serial) for serial in (2, 3)]
+            db.session.add(product)
         db.session.commit()
         for product in Product.query.all():
-            receive(product.id, '3', date.today().isoformat())
+            db.session.add(Reception(product_id=product.id, quantity=3, received_on=date.today()))
+        db.session.commit()
         self.client = self.app.test_client()
         self.runtime = self.app.extensions['smartshop']
         self.reader = self.runtime.membership
@@ -100,7 +102,12 @@ class ShopTests(unittest.TestCase):
         self.assertEqual(self.post('/products/new', values).location, '/products')
         product = Product.query.filter_by(epc='00AA').one()
         self.assertEqual(product.upc, '000000001')
-        self.assertEqual(product.stock, 0)
+        self.assertEqual(product.stock, 1)
+        self.assertEqual(product.added_on, date.today())
+        self.assertNotIn(b'Date added', self.client.get('/products').data)
+        inventory = self.client.get(f'/inventory/{product.id}').data
+        self.assertIn(b'Date added', inventory)
+        self.assertIn(f'<time datetime="{product.added_on}">'.encode(), inventory)
         self.assertEqual(self.client.get('/products/lookup?upc=000000001%0D%0A').json['id'], product.id)
         self.assertEqual(self.client.get('/products/lookup?upc=9999').status_code, 404)
         self.assertEqual(self.client.get('/products/lookup?upc=abc').status_code, 400)
@@ -111,14 +118,12 @@ class ShopTests(unittest.TestCase):
         self.post('/products/1/delete')
         self.assertTrue(db.session.get(Product, 1).archived)
 
-    def test_receptions_accumulate_and_invalid_data_is_atomic(self):
+    def test_manual_receptions_are_read_only(self):
         self.login('admin@example.com')
-        self.post('/inventory/1', {'quantity': '4', 'received_on': '2026-01-01'})
-        self.assertEqual(db.session.get(Product, 1).stock, 7)
-        self.assertEqual(Reception.query.filter_by(product_id=1).count(), 2)
-        for quantity, received in [('0', '2026-01-01'), ('-1', '2026-01-01'), ('1.5', '2026-01-01'), ('2', 'invalid'), ('2', '2999-01-01')]:
-            self.post('/inventory/1', {'quantity': quantity, 'received_on': received})
-        self.assertEqual(db.session.get(Product, 1).stock, 7)
+        self.assertIn(b'Past receptions', self.client.get('/inventory/1').data)
+        self.assertEqual(self.post('/inventory/1', {'quantity': '4', 'received_on': '2026-01-01'}).status_code, 405)
+        self.assertEqual(db.session.get(Product, 1).stock, 3)
+        self.assertEqual(Reception.query.filter_by(product_id=1).count(), 1)
 
     def test_database_rejects_removing_product_with_inventory_history(self):
         with self.assertRaises(IntegrityError):
@@ -148,7 +153,7 @@ class ShopTests(unittest.TestCase):
         self.assertNotEqual(new_path, path)
         self.assertEqual(db.session.get(Checkout, path.rsplit('/', 1)[1]).status, 'cancelled')
 
-    def test_guest_payment_fail_cancel_success_duplicate_and_reusable_tag(self):
+    def test_guest_payment_fail_cancel_success_duplicate_and_sold_tag(self):
         path = self.scanned_cart()
         for outcome in ('failure', 'cancel'):
             self.ready(path)
@@ -166,7 +171,12 @@ class ShopTests(unittest.TestCase):
         self.assertEqual(db.session.get(Product, 1).stock, 2)
         self.assertEqual(self.app.test_client().get(response.location).status_code, 404)
         self.assertEqual(self.client.get(response.location).status_code, 200)
-        later = self.scanned_cart()
+        later = self.new_cart()
+        self.post(later, {'action': 'scan'})
+        self.post('/reader/fake', {'tags': self.tags[0]})
+        self.assertEqual(self.post(later + '/poll').json['messages'], ['RFID unit already sold'])
+        self.post('/reader/fake', {'tags': 'AB0002'})
+        self.assertEqual(self.post(later + '/poll').json['items'][0]['rfid_serials'], [2])
         self.ready(later)
         self.post(later + '/payment', {'outcome': 'success'})
         self.assertEqual(db.session.get(Product, 1).stock, 1)
@@ -456,6 +466,54 @@ class ReaderTests(unittest.TestCase):
 
 
 class MigrationTests(unittest.TestCase):
+    def test_migration_releases_previously_removed_epcs_without_changing_stock(self):
+        app = create_app({'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:'})
+        with app.app_context():
+            migrate()
+            product = Product(name='Banana', category='Produce', producer='Fixture', upc='001',
+                              epc='00AA', stock=0, price_cents=100)
+            product.rfid_units.append(ProductTag(epc='00BB', serial=2))
+            db.session.add(product)
+            db.session.flush()
+            db.session.add_all(RemovedProductUnit(product_id=product.id, serial=serial) for serial in (1, 2))
+            db.session.execute(text('DELETE FROM schema_version WHERE version = 3'))
+            db.session.commit()
+            migrate()
+            migrate()
+            db.session.refresh(product)
+            self.assertIsNone(product.primary_epc)
+            self.assertIsNone(ProductTag.query.filter_by(epc='00BB').first())
+            self.assertEqual(product.stock, 0)
+            self.assertEqual(RemovedProductUnit.query.count(), 2)
+            db.session.remove()
+            db.engine.dispose()
+
+    def test_existing_stock_is_initialized_from_registered_epcs_once(self):
+        app = create_app({'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:'})
+        with app.app_context():
+            db.create_all()
+            product = Product(name='Banana', category='Produce', producer='Fixture', upc='001',
+                              epc='00AA', stock=9, price_cents=100)
+            product.rfid_units.append(ProductTag(epc='00BB', serial=2))
+            db.session.add(product)
+            db.session.commit()
+            migrate()
+            db.session.refresh(product)
+            self.assertEqual(product.stock, 2)
+            cart = Checkout(owner='guest')
+            db.session.add(cart)
+            db.session.commit()
+            add_tags(cart, ['00BB'])
+            review(cart)
+            cart.status = 'payment'
+            db.session.commit()
+            finalize(cart)
+            migrate()
+            db.session.refresh(product)
+            self.assertEqual(product.stock, 1)
+            db.session.remove()
+            db.engine.dispose()
+
     def test_legacy_customers_and_hash_survive_repeat_migration(self):
         app = create_app({'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:'})
         with app.app_context():
@@ -472,7 +530,7 @@ class MigrationTests(unittest.TestCase):
             number = customer.membership_number
             migrate()
             self.assertEqual(customer.membership_number, number)
-            self.assertEqual(db.session.execute(text('SELECT COUNT(*) FROM schema_version')).scalar(), 1)
+            self.assertEqual(db.session.execute(text('SELECT COUNT(*) FROM schema_version')).scalar(), 5)
             with self.assertRaises(IntegrityError):
                 db.session.execute(text("UPDATE customer SET membership_number=NULL"))
                 db.session.commit()

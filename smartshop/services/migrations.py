@@ -1,4 +1,4 @@
-"""Explicit additive v1 migration, preserving original customer rows/hashes."""
+"""Additive migrations for customer records and RFID inventory."""
 from uuid import uuid4
 from sqlalchemy import inspect, text
 from smartshop.extensions import db
@@ -44,3 +44,37 @@ def migrate():
     with engine.begin() as connection:
         if not connection.execute(text('SELECT version FROM schema_version WHERE version=1')).first():
             connection.execute(text('INSERT INTO schema_version (version) VALUES (1)'))
+        if not connection.execute(text('SELECT version FROM schema_version WHERE version=2')).first():
+            connection.execute(text('''
+                UPDATE product SET stock = 1 + (
+                    SELECT COUNT(*) FROM product_tag WHERE product_tag.product_id = product.id
+                )
+            '''))
+            connection.execute(text('INSERT INTO schema_version (version) VALUES (2)'))
+        if not connection.execute(text('SELECT version FROM schema_version WHERE version=3')).first():
+            primary_removals = connection.execute(text(
+                'SELECT product_id FROM removed_product_unit WHERE serial = 1'
+            )).scalars().all()
+            if primary_removals:
+                connection.execute(text('UPDATE product SET epc = :epc WHERE id = :id'), [
+                    {'epc': models.Product.vacant_primary_key(product_id), 'id': product_id}
+                    for product_id in primary_removals
+                ])
+            connection.execute(text('''
+                DELETE FROM product_tag WHERE EXISTS (
+                    SELECT 1 FROM removed_product_unit
+                    WHERE removed_product_unit.product_id = product_tag.product_id
+                      AND removed_product_unit.serial = product_tag.serial
+                )
+            '''))
+            connection.execute(text('INSERT INTO schema_version (version) VALUES (3)'))
+        if not connection.execute(text('SELECT version FROM schema_version WHERE version=4')).first():
+            columns = {column['name'] for column in inspect(connection).get_columns('product')}
+            if 'added_on' not in columns:
+                connection.execute(text('ALTER TABLE product ADD COLUMN added_on DATE'))
+            connection.execute(text('INSERT INTO schema_version (version) VALUES (4)'))
+        if not connection.execute(text('SELECT version FROM schema_version WHERE version=5')).first():
+            columns = {column['name'] for column in inspect(connection).get_columns('product_tag')}
+            if 'added_on' not in columns:
+                connection.execute(text('ALTER TABLE product_tag ADD COLUMN added_on DATE'))
+            connection.execute(text('INSERT INTO schema_version (version) VALUES (5)'))

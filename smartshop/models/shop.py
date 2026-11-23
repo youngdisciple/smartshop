@@ -1,5 +1,5 @@
 """Checkout and inventory records. Money is always integer cents."""
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import uuid4
 from smartshop.extensions import db
 
@@ -20,11 +20,35 @@ class Product(db.Model):
     upc = db.Column(db.String(13), unique=True, nullable=False)
     epc = db.Column(db.String(24), unique=True, nullable=False)
     price_cents = db.Column(db.Integer, nullable=False)
-    stock = db.Column(db.Integer, nullable=False, default=0)
+    stock = db.Column(db.Integer, nullable=False, default=1)
+    added_on = db.Column(db.Date, default=date.today)
     archived = db.Column(db.Boolean, nullable=False, default=False)
+    rfid_units = db.relationship('ProductTag', order_by='ProductTag.serial', cascade='all, delete-orphan')
     __table_args__ = (
         db.CheckConstraint('stock >= 0'), db.CheckConstraint('price_cents > 0'),
     )
+
+    @property
+    def primary_epc(self):
+        return self.epc if self.epc and not self.epc.startswith('!') else None
+
+    @staticmethod
+    def vacant_primary_key(product_id):
+        # Keep the legacy NOT NULL, unique column without reserving an actual EPC.
+        return f'!{product_id}'
+
+
+class ProductTag(db.Model):
+    epc = db.Column(db.String(24), primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    serial = db.Column(db.Integer, nullable=False)
+    added_on = db.Column(db.Date, default=date.today)
+    __table_args__ = (db.UniqueConstraint('product_id', 'serial'), db.CheckConstraint('serial >= 2'))
+
+
+class RemovedProductUnit(db.Model):
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), primary_key=True)
+    serial = db.Column(db.Integer, primary_key=True)
 
 
 class Reception(db.Model):
@@ -75,3 +99,9 @@ class PurchaseItem(db.Model):
     unit_cents = db.Column(db.Integer, nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     __table_args__ = (db.CheckConstraint('quantity > 0'),)
+
+
+class SoldProductUnit(db.Model):
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), primary_key=True)
+    serial = db.Column(db.Integer, primary_key=True)
+    purchase_id = db.Column(db.String(32), db.ForeignKey('purchase.id'), nullable=False)

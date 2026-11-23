@@ -1,6 +1,6 @@
 # SmartShop
 
-Flask inventory and self-checkout with reusable UHF product tags, ESP32/RC522
+Flask inventory and self-checkout with UHF product tags, ESP32/RC522
 membership cards over MQTT, customer accounts, simulated payment, loyalty points,
 receipts, and English/French screens. The refrigerator dashboard, MQTT telemetry,
 Resend alerts, Gmail reply control and Raspberry Pi fan remain available.
@@ -62,14 +62,17 @@ only. Forms and polling mutations require CSRF tokens. Use HTTPS and
    UPC is a string of up to 13 digits, EPC up to 24 hex characters; leading
    zeros survive. A keyboard-wedge barcode scanner can fill the UPC field,
    with Enter handled as a field terminator. Its actual device remains unverified.
-2. Receive positive stock quantities with a date, repeatedly if needed.
-   Registration alone never adds stock. Receptions are preserved in history.
+2. The first EPC adds one unit to stock. Under **Products → RFID units**, add
+   each additional unit's unique EPC. Each added EPC increases stock by one.
+   Use **Remove** beside a unit to take it out of stock.
+   The unit disappears from the list. Add its EPC again to assign a new unit number.
+   The inventory page retains past manual receptions as history.
 3. Open `/` or `/checkout` and start a cart. Checkout is public and requires no sign-in. Scan a barcode into the UPC field; Enter
    or Tab submits it, or click Add barcode. Each deliberate barcode scan adds
    one unit. Barcode checkout works without arming the RFID reader. Alternatively,
    arm the product reader to collect multiple RFID tags. Fake mode exposes a
    development EPC input; it is disabled by default.
-4. Each distinct reusable RFID tag adds one unit once. Repeated RFID reports
+4. Each distinct in-stock RFID tag adds one unit once. Repeated RFID reports
    preserve the current quantity. Use +/− to adjust units up to available stock;
    decreasing to zero removes the line. Removing a product suppresses RFID
    reappearance until Add back or an explicit barcode scan. Barcode and RFID
@@ -84,9 +87,12 @@ only. Forms and polling mutations require CSRF tokens. Use HTTPS and
 7. View the saved receipt. Members see their purchase history and points in
    `/account`. Archived or edited products do not change historical receipts.
 
-The same physical tag can be used in a later checkout while stock remains.
-Sales never permanently disable tags. Four products are the intended physical
-demo dataset; CRUD and repeated receptions also support later products.
+Successful payment marks the scanned EPCs sold. When a barcode-only quantity
+has no scanned EPC, checkout deducts the lowest-numbered remaining unit for
+that product. Scan the physical RFID tag when the purchase must match the
+actual tag. On upgrade, the existing first EPC and additional registered EPCs
+form the opening stock. Historical sales are preserved and cannot be reliably
+matched to tags used under the previous stock rules.
 
 ### Verified product setup
 
@@ -111,7 +117,7 @@ illustration and intentionally fails validation. After physical confirmation:
 python -m scripts.setup_shop --verified-products /path/to/products.json
 ```
 
-Repeated setup never duplicates products or adds stock. Conflicting existing
+Repeated setup never duplicates products or increases their stock. Conflicting existing
 metadata requires an explicit product edit. Test fixtures use **synthetic DE…
 EPCs**, not the photographed production tag values.
 
@@ -161,7 +167,7 @@ python -m scripts.scan_products --hardware --device /dev/serial/by-id/YOUR_READE
 ```
 
 Present each tag separately, then all four together. Capture one EPC in product
-registration, save actual metadata and receive stock. In checkout, start a scan
+registration and save the actual metadata. Add more tagged units under **RFID units**. In checkout, start a scan
 and present the tags; the browser updates automatically and repeated EPCs add no
 quantity. The registration screen shows its waiting state and prevents duplicate
 polling loops. Multiple tags require stopping and restarting capture with only

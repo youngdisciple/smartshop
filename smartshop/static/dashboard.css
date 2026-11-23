@@ -69,6 +69,8 @@ tbody th { font-weight: 600; }
 tbody tr:last-child > * { border-bottom: 0; }
 .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
 .signup-panel { max-width: 850px; }
+#password-toggle { margin-top: 8px; }
+#password-toggle[hidden] { display: none; }
 .customer-form { padding: 28px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .full-width { grid-column: 1 / -1; }

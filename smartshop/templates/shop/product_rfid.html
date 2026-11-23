@@ -1,0 +1,49 @@
+{% extends 'base.html' %}{% from 'shop/forms.html' import csrf, field with context %}
+{% macro unit_row(serial, epc) %}
+  {% set label = product.name ~ '#' ~ serial %}
+  {% set sold = serial in sold_serials %}
+  <tr>
+    <th scope="row">{{ label }}</th><td><code>{{ epc }}</code></td>
+    <td>{{ _('Sold') if sold else _('In stock') }}</td>
+    <td>
+      {% if not product.archived and not sold %}
+      <form method="post" action="{{ url_for('shop.product_rfid_remove', product_id=product.id, serial=serial) }}">
+        {{ csrf() }}
+        <button aria-label="{{ _('Remove') }} {{ label }}">{{ _('Remove') }}</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+{% endmacro %}
+{% block content %}
+<header class="page-header">
+  <div><h1>{{ _('RFID units') }}</h1><p>{{ product.name }} · {{ _('Stock') }} {{ product.stock }}</p></div>
+  <a href="{{ url_for('shop.products') }}">{{ _('Products') }}</a>
+</header>
+{% if not product.archived %}
+<section class="panel signup-panel">
+  <form class="customer-form" method="post">
+    {{ csrf() }}
+    {{ field('epc', 'EPC', request.form.get('epc', ''), maxlength=24) }}
+    <p class="help">{{ _('Capture one tag or enter its unique EPC to add one unit to stock.') }}</p>
+    <div class="form-actions"><button>{{ _('Add RFID unit') }}</button></div>
+  </form>
+</section>
+{% include 'shop/product_scanner.html' %}
+{% endif %}
+<section class="panel table-scroll">
+  <table>
+    <thead><tr><th scope="col">{{ _('RFID unit') }}</th><th scope="col">{{ _('EPC') }}</th><th scope="col">{{ _('Status') }}</th><th scope="col">{{ _('Actions') }}</th></tr></thead>
+    <tbody>
+      {% if product.primary_epc %}{{ unit_row(1, product.primary_epc) }}{% endif %}
+      {% for unit in product.rfid_units %}
+      {{ unit_row(unit.serial, unit.epc) }}
+      {% endfor %}
+      {% if not product.primary_epc and not product.rfid_units %}
+      <tr><td colspan="4">{{ _('No RFID units registered') }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+{% block scripts %}{% if not product.archived %}<script src="{{ url_for('static', filename='product.js') }}" defer></script>{% endif %}{% endblock %}

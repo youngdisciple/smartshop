@@ -6,8 +6,11 @@ from smartshop.extensions import db
 from smartshop.models import Checkout, Customer, MembershipCard, Product, Purchase, PurchaseItem, Reception
 from smartshop.security import admin_required, login_required, owner
 from smartshop.presentation.i18n import tr
-from smartshop.services.catalog import product_values, receive, upc
-from smartshop.services.checkout import add_tags, add_barcode, cart_total, change_quantity, finalize, review
+from smartshop.services.catalog import (
+    product_values, register_rfid_unit, remove_rfid_unit, removed_rfid_serials, sold_rfid_serials, upc,
+    validate_catalog_epc,
+)
+from smartshop.services.checkout import add_tags, add_barcode, cart_total, change_quantity, finalize, remove_product, restore_product, review
 from smartshop.services.receipts import deliver
 
 shop = Blueprint('shop', __name__)
@@ -61,11 +64,17 @@ def product_edit(product_id=None):
     product = db.get_or_404(Product, product_id) if product_id else None
     if request.method == 'POST':
         try:
-            values = product_values(request.form)
+            if product is not None:
+                db.session.refresh(product, with_for_update=True)
+            values = product_values(request.form, include_epc=product is None or product.primary_epc is not None)
+            if 'epc' in values:
+                validate_catalog_epc(values['epc'])
             if product is None:
                 product = Product(**values)
                 db.session.add(product)
             else:
+                if 'epc' in values and values['epc'] != product.epc and 1 in sold_rfid_serials(product.id, lock=True):
+                    raise ValueError('The first EPC belongs to a sold unit and cannot be changed')
                 for key, value in values.items():
                     setattr(product, key, value)
             db.session.commit()
@@ -78,6 +87,37 @@ def product_edit(product_id=None):
     return render_template('shop/product.html', product=product)
 
 
+@shop.route('/products/<int:product_id>/rfid', methods=['GET', 'POST'])
+@admin_required
+@serialized
+def product_rfid(product_id):
+    product = db.get_or_404(Product, product_id)
+    if request.method == 'POST':
+        try:
+            register_rfid_unit(product, request.form.get('epc', ''))
+            runtime().reader.cancel_owner(owner())
+            notify('RFID unit added')
+            return redirect(url_for('shop.product_rfid', product_id=product_id))
+        except (ValueError, IntegrityError) as error:
+            db.session.rollback()
+            flash(tr(str(error) if isinstance(error, ValueError) else 'Could not add RFID unit. Try again.'), 'error')
+    return render_template('shop/product_rfid.html', product=product, sold_serials=sold_rfid_serials(product_id))
+
+
+@shop.post('/products/<int:product_id>/rfid/<int:serial>/remove')
+@admin_required
+@serialized
+def product_rfid_remove(product_id, serial):
+    db.get_or_404(Product, product_id)
+    try:
+        remove_rfid_unit(product_id, serial)
+        notify('RFID unit removed')
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(tr(str(error) if isinstance(error, ValueError) else 'RFID unit is not in stock'), 'error')
+    return redirect(url_for('shop.product_rfid', product_id=product_id))
+
+
 @shop.post('/products/<int:product_id>/delete')
 @admin_required
 @serialized
@@ -85,7 +125,7 @@ def product_delete(product_id):
     product = db.get_or_404(Product, product_id)
     used = db.session.execute(db.select(Reception.id).filter_by(product_id=product_id).limit(1)).first()
     sold = db.session.execute(db.select(PurchaseItem.id).filter_by(product_id=product_id).limit(1)).first()
-    if used or sold:
+    if used or sold or removed_rfid_serials(product_id):
         product.archived = True
         notify('Product archived')
     else:
@@ -95,21 +135,17 @@ def product_delete(product_id):
     return redirect(url_for('shop.products'))
 
 
-@shop.route('/inventory/<int:product_id>', methods=['GET', 'POST'])
+@shop.get('/inventory/<int:product_id>')
 @admin_required
-@serialized
 def inventory(product_id):
     product = db.get_or_404(Product, product_id)
-    if request.method == 'POST':
-        try:
-            receive(product_id, request.form.get('quantity'), request.form.get('received_on'))
-            notify('Stock received')
-            return redirect(url_for('shop.inventory', product_id=product_id))
-        except ValueError as error:
-            db.session.rollback()
-            flash(tr(str(error)), 'error')
+    sold_serials = sold_rfid_serials(product_id)
+    units = []
+    if product.primary_epc and 1 not in sold_serials:
+        units.append((1, product.primary_epc, product.added_on))
+    units.extend((tag.serial, tag.epc, tag.added_on) for tag in product.rfid_units if tag.serial not in sold_serials)
     receptions = db.session.execute(db.select(Reception).filter_by(product_id=product_id).order_by(Reception.received_on.desc())).scalars().all()
-    return render_template('shop/inventory.html', product=product, receptions=receptions)
+    return render_template('shop/inventory.html', product=product, units=units, receptions=receptions)
 
 
 @shop.get('/products/lookup')
@@ -237,13 +273,10 @@ def cart(cart_id):
             elif action in ('remove', 'restore') and cart.status == 'scanning':
                 product_id = int(request.form.get('product_id', '0'))
                 if action == 'remove':
-                    cart.items = [item for item in cart.items if item['product_id'] != product_id]
-                    cart.suppressed = list(set(cart.suppressed + [product_id]))
+                    remove_product(cart, product_id)
                 else:
-                    product = db.get_or_404(Product, product_id)
-                    cart.suppressed = [value for value in cart.suppressed if value != product_id]
-                    add_tags(cart, [product.epc])
-                db.session.commit()
+                    for message in restore_product(cart, db.get_or_404(Product, product_id)):
+                        flash(tr(message), 'error')
                 notify('Cart updated')
             elif action == 'review':
                 review(cart)
@@ -305,7 +338,8 @@ def cart(cart_id):
         candidate = card.customer.membership_number if card else None
     except ValueError:
         pass
-    suppressed = db.session.execute(db.select(Product).where(Product.id.in_(cart.suppressed))).scalars().all() if cart.suppressed else []
+    suppressed_ids = [value for value in cart.suppressed if isinstance(value, int)]
+    suppressed = db.session.execute(db.select(Product).where(Product.id.in_(suppressed_ids))).scalars().all() if suppressed_ids else []
     return render_template('shop/cart.html', cart=cart, total=cart_total(cart),
                            member=member, candidate=candidate, suppressed=suppressed)
 
