@@ -7,10 +7,11 @@ from time import monotonic
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
+from sqlalchemy import event, inspect, text
 
 from smartshop import create_app
 from smartshop.extensions import db
-from smartshop.models import BLESensor, Customer
+from smartshop.models import Customer
 from smartshop.presentation.ble import receipt, sensor_view
 from smartshop.routes.ble import live_payload
 from smartshop.services.ble import BLEService, MINEW_SERVICE, decode_minew
@@ -113,6 +114,22 @@ class MinewDecoderTests(unittest.TestCase):
 
 
 class BLEScanTests(unittest.TestCase):
+    def test_partial_scan_frames_are_merged_in_memory_and_cleared_on_stop(self):
+        service = BLEService({}, scanner_factory=object)
+        first = device_record()
+        second = device_record()
+        second['last_seen'] = '2026-11-23T16:00:00+00:00'
+        second['measurements'] = {'motion': {'value': False, 'received_at': second['last_seen']}}
+        with patch.object(service, '_collect', new_callable=AsyncMock, side_effect=[{ADDRESS: first}, {ADDRESS: second}, {}]):
+            service.scan()
+            service.scan()
+            service.scan()
+        readings = service.live_snapshot()['devices'][ADDRESS]['measurements']
+        self.assertEqual(readings['temperature']['value'], 21.5)
+        self.assertFalse(readings['motion']['value'])
+        service.stop()
+        self.assertEqual(service.live_snapshot()['devices'], {})
+
     def test_live_subscribers_share_one_receiver_and_last_viewer_stops_it(self):
         ready, stopped = Event(), Event()
         instances = []
@@ -270,11 +287,11 @@ class BLEAdminTests(unittest.TestCase):
         with patch.object(self.service, 'scan') as scan:
             self.assertNotIn(b'href="/admin/ble"', self.client.get('/checkout').data)
             self.assertEqual(self.client.get('/admin/ble').location, '/auth/login')
-            for action in ('scan', 'refresh', 'connect', 'disconnect'):
+            for action in ('scan', 'refresh', 'connect', 'disconnect', 'motion'):
                 self.assertIn(b'Sign in', self.post(action, address=ADDRESS).data)
             self.login_as('member@example.com')
             self.assertEqual(self.client.get('/admin/ble').status_code, 403)
-            for action in ('scan', 'refresh', 'connect', 'disconnect'):
+            for action in ('scan', 'refresh', 'connect', 'disconnect', 'motion'):
                 self.assertEqual(self.post(action, address=ADDRESS).status_code, 403)
             self.login_as('admin@example.com')
             self.assertEqual(self.client.post('/admin/ble', data={'action': 'scan'}).status_code, 400)
@@ -292,23 +309,29 @@ class BLEAdminTests(unittest.TestCase):
             scan.assert_called_once()
         self.assertIn(b'21.5', self.post('connect', address=ADDRESS.lower()).data)
         db.session.remove()
-        sensor = db.session.get(BLESensor, ADDRESS)
-        self.assertEqual(sensor.name, 'MSP01')
-        self.assertEqual(sensor.measurements['temperature']['value'], 21.5)
+        self.assertEqual(self.service.connected()[ADDRESS]['name'], 'MSP01')
+        self.assertFalse(inspect(db.engine).has_table('ble_sensor'))
+        self.assertEqual(self.service.live_snapshot()['devices'][ADDRESS]['measurements']['temperature']['value'], 21.5)
         new = device_record()
         new['last_seen'] = '2026-11-23T15:01:00+00:00'
         new['measurements'] = {'motion': {'value': False, 'received_at': new['last_seen']}}
-        with patch.object(self.service, 'scan', return_value={ADDRESS: new}):
+        def scan_new():
+            self.service._store_scan({ADDRESS: new})
+            return {ADDRESS: new}
+
+        with patch.object(self.service, 'scan', side_effect=scan_new):
             page = self.post('refresh')
-        self.assertIn(b'No motion detected', page.data)
-        self.assertEqual(sensor.measurements['temperature']['received_at'], '2026-11-23T15:00:00+00:00')
-        self.assertEqual(sensor.last_seen, new['last_seen'])
+        self.assertIn(b'Monitoring off', page.data)
+        cached = self.service.live_snapshot()['devices'][ADDRESS]
+        self.assertEqual(cached['measurements']['temperature']['received_at'], '2026-11-23T15:00:00+00:00')
+        self.assertEqual(cached['last_seen'], new['last_seen'])
         with patch.object(self.service, 'scan', return_value={}):
             page = self.post('refresh')
         self.assertIn(b'No Minew sensors found', page.data)
-        self.assertEqual(sensor.last_seen, new['last_seen'])
+        self.assertEqual(self.service.live_snapshot()['devices'][ADDRESS]['last_seen'], new['last_seen'])
         self.post('disconnect', address=ADDRESS)
-        self.assertIsNone(db.session.get(BLESensor, ADDRESS))
+        self.assertNotIn(ADDRESS, self.service.connected())
+        self.assertFalse(inspect(db.engine).has_table('ble_sensor'))
 
     def test_unscanned_expired_invalid_addresses_and_duplicate_connect(self):
         self.login_as('admin@example.com')
@@ -320,7 +343,7 @@ class BLEAdminTests(unittest.TestCase):
         self.discover()
         for _ in range(2):
             self.post('connect', address=ADDRESS)
-        self.assertEqual(BLESensor.query.count(), 1)
+        self.assertEqual(len(self.service.connected()), 1)
 
     def test_hardware_errors_render_without_losing_saved_sensor(self):
         self.login_as('admin@example.com')
@@ -328,7 +351,7 @@ class BLEAdminTests(unittest.TestCase):
         self.post('connect', address=ADDRESS)
         with patch.object(self.service, 'scan', side_effect=ValueError('Bluetooth powered off')):
             self.assertIn(b'Bluetooth powered off', self.post('refresh').data)
-        self.assertEqual(BLESensor.query.count(), 1)
+        self.assertEqual(len(self.service.connected()), 1)
 
     def test_connection_lands_on_readings_and_keeps_setup_and_settings_secondary(self):
         self.login_as('admin@example.com')
@@ -363,7 +386,7 @@ class BLEAdminTests(unittest.TestCase):
             self.assertEqual(self.client.get('/admin/ble/events').status_code, 204)
             subscribe.assert_not_called()
 
-    def test_stream_pushes_new_values_persists_them_and_releases_subscription(self):
+    def test_stream_pushes_values_without_database_writes_and_releases_subscription(self):
         self.login_as('admin@example.com')
         self.discover()
         self.post('connect', address=ADDRESS)
@@ -372,6 +395,14 @@ class BLEAdminTests(unittest.TestCase):
         record['measurements']['temperature'] = {'value': 25, 'received_at': record['last_seen']}
         record['measurements']['motion'] = {'value': False, 'received_at': record['last_seen']}
         snapshot = {'state': 'receiving', 'error': None, 'devices': {ADDRESS: record}, 'version': 1}
+        writes = []
+
+        def record_writes(connection, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().split()[0].upper() in ('INSERT', 'UPDATE', 'DELETE', 'REPLACE'):
+                writes.append(statement)
+
+        event.listen(db.engine, 'before_cursor_execute', record_writes)
+        self.addCleanup(event.remove, db.engine, 'before_cursor_execute', record_writes)
         with patch.object(self.service, 'subscribe', return_value='viewer') as subscribe, \
                 patch.object(self.service, 'unsubscribe') as unsubscribe, \
                 patch.object(self.service, 'live_snapshot', return_value=snapshot), \
@@ -384,8 +415,8 @@ class BLEAdminTests(unittest.TestCase):
             data = json.loads(next(iterator).decode().split('data: ', 1)[1])
             self.assertEqual(data['state'], 'receiving')
             self.assertEqual(data['sensors'][0]['readings'][0]['display'], '25')
-            self.assertEqual(data['sensors'][0]['readings'][3]['display'], 'No motion detected')
-            self.assertEqual(db.session.get(BLESensor, ADDRESS).measurements['temperature']['value'], 25)
+            self.assertEqual(data['sensors'][0]['readings'][3]['display'], 'Monitoring off')
+            self.assertFalse(inspect(db.engine).has_table('ble_sensor'))
             self.assertIn(b'heartbeat', next(iterator))
             snapshot['version'] = 2
             record['measurements']['temperature']['value'] = 26
@@ -394,16 +425,83 @@ class BLEAdminTests(unittest.TestCase):
             response.close()
             subscribe.assert_called_once()
             unsubscribe.assert_called_once_with('viewer')
+        self.assertEqual(writes, [])
 
-    def test_older_live_snapshot_cannot_overwrite_newer_persisted_readings(self):
+    def test_server_restart_clears_connections_and_readings(self):
         self.login_as('admin@example.com')
-        newer = device_record()
-        newer['last_seen'] = '2026-11-23T16:00:00+00:00'
-        newer['measurements']['temperature'] = {'value': 30, 'received_at': newer['last_seen']}
-        self.discover(newer)
+        self.discover()
         self.post('connect', address=ADDRESS)
-        snapshot = {'state': 'receiving', 'error': None, 'devices': {ADDRESS: device_record()}, 'version': 1}
-        with self.app.test_request_context('/admin/ble/events'), \
-                patch.object(self.service, 'live_snapshot', return_value=snapshot):
+        self.assertIn(ADDRESS, self.service.connected())
+        fresh_service = BLEService({})
+        with self.app.test_request_context('/admin/ble/events'):
+            payload, _ = live_payload(fresh_service)
+        self.assertEqual(payload['sensors'], [])
+        self.app.extensions['smartshop'].ble = fresh_service
+        self.assertIn(b'Connect your first sensor', self.client.get('/admin/ble').data)
+        self.assertFalse(inspect(db.engine).has_table('ble_sensor'))
+
+    def test_legacy_database_readings_are_left_untouched(self):
+        # Synthetic legacy data in the isolated in-memory test database only.
+        db.session.execute(text('CREATE TABLE ble_sensor (address VARCHAR(17) PRIMARY KEY, name VARCHAR(100), measurements JSON, last_seen VARCHAR(40), rssi INTEGER)'))
+        db.session.execute(text('INSERT INTO ble_sensor VALUES (:address, :name, :readings, :seen, -45)'),
+                           {'address': ADDRESS, 'name': 'Old device',
+                            'readings': json.dumps(device_record()['measurements']),
+                            'seen': device_record()['last_seen']})
+        db.session.commit()
+        original = tuple(db.session.execute(text('SELECT * FROM ble_sensor')).one())
+        migrate()
+        self.login_as('admin@example.com')
+        self.discover()
+        self.post('connect', address=ADDRESS)
+        with self.app.test_request_context('/admin/ble/events'):
             payload, _ = live_payload(self.service)
-        self.assertEqual(payload['sensors'][0]['readings'][0]['display'], '30')
+        self.assertEqual(payload['sensors'][0]['name'], 'MSP01')
+        self.post('disconnect', address=ADDRESS)
+        self.assertEqual(tuple(db.session.execute(text('SELECT * FROM ble_sensor')).one()), original)
+        self.assertEqual({column['name'] for column in inspect(db.engine).get_columns('ble_sensor')},
+                         {'address', 'name', 'measurements', 'last_seen', 'rssi'})
+
+    def test_motion_toggle_emails_signed_in_admin_without_database_writes(self):
+        self.login_as('admin@example.com')
+        self.discover()
+        self.post('connect', address=ADDRESS)
+        from unittest.mock import Mock
+        sender = SimpleNamespace(configured=True, send=Mock(return_value=True))
+        self.service._alert_sender = sender
+        self.service._dispatch = lambda function, *args: function(*args)
+        writes = []
+
+        def record_writes(connection, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().split()[0].upper() in ('INSERT', 'UPDATE', 'DELETE', 'REPLACE'):
+                writes.append(statement)
+
+        event.listen(db.engine, 'before_cursor_execute', record_writes)
+        self.addCleanup(event.remove, db.engine, 'before_cursor_execute', record_writes)
+        with patch.object(self.service, 'subscribe', return_value='alarm-viewer') as subscribe, \
+                patch.object(self.service, 'unsubscribe') as unsubscribe:
+            page = self.post('motion', address=ADDRESS, enabled='on', recipient='untrusted@example.com')
+            self.assertIn(b'aria-checked="true"', page.data)
+            self.assertIn(b'admin@example.com', page.data)
+            self.assertEqual(self.service.connected()[ADDRESS]['alert_recipient'], 'admin@example.com')
+            self.service._handle_motion(ADDRESS, True, '2026-11-23T17:00:00+00:00')
+            sender.send.assert_called_once()
+            self.assertEqual(sender.send.call_args.args[0]['recipient'], 'admin@example.com')
+            page = self.post('motion', address=ADDRESS, enabled='off')
+            self.assertIn(b'aria-checked="false"', page.data)
+            self.assertIn(b'Monitoring off', page.data)
+            self.service._handle_motion(ADDRESS, True, '2026-11-23T17:01:00+00:00')
+            sender.send.assert_called_once()
+            subscribe.assert_called_once()
+            unsubscribe.assert_called_once_with('alarm-viewer')
+        self.assertEqual(writes, [])
+        self.assertFalse(inspect(db.engine).has_table('ble_sensor'))
+
+    def test_motion_toggle_reports_missing_email_setup(self):
+        self.login_as('admin@example.com')
+        self.discover()
+        self.post('connect', address=ADDRESS)
+        self.service._alert_sender = None
+        page = self.post('motion', address=ADDRESS, enabled='on')
+        self.assertIn(b'Configure Gmail or Resend', page.data)
+        self.assertFalse(self.service.connected()[ADDRESS]['motion_enabled'])
+        self.assertIn(b'Invalid operation', self.post('motion', address=ADDRESS, enabled='invalid').data)

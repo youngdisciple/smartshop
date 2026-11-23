@@ -49,6 +49,13 @@
 .ble-motion-ring { fill: none; stroke: currentColor; stroke-width: 1.2; opacity: .25; transform-origin: 110px 56px; }
 .ble-motion-disc { fill: currentColor; opacity: .07; }
 .ble-motion-visual[data-motion="unknown"] { opacity: .45; }
+.ble-motion-visual[data-motion="off"] { opacity: .35; }
+.ble-motion-settings { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 20px; padding: 18px 28px; border-bottom: 1px solid var(--line); }
+.ble-motion-controls { margin: 0; }
+.ble-motion-controls button { width: 100%; white-space: normal; padding: 10px 12px; gap: 10px; }
+.ble-motion-controls button[aria-checked="true"] { background: var(--orange); border-color: var(--orange); }
+.ble-motion-email-status { font-size: 12px; overflow-wrap: anywhere; }
+.ble-motion-control-help { grid-column: 1 / -1; font-size: 11px; }
 .ble-metric[data-freshness="recent"] .ble-motion-visual[data-motion="detected"] { color: var(--orange); }
 .ble-page[data-live-state="live"] .ble-metric[data-freshness="recent"] .ble-motion-visual[data-motion="detected"] .ble-motion-ring { animation: ble-motion-pulse 2s ease-out infinite; }
 .ble-motion-ring-inner { animation-delay: .6s !important; }
@@ -122,6 +129,7 @@
   .ble-device-details dl { grid-template-columns: 1fr; padding-inline: 18px; gap: 16px; }
   .ble-discovery-body { padding-inline: 18px; }
   .ble-missing-note { padding-inline: 18px; }
+  .ble-motion-settings { grid-template-columns: 1fr; padding-inline: 18px; }
 }
 @media (max-width: 360px) {
   .ble-metrics { grid-template-columns: 1fr; }

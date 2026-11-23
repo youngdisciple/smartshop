@@ -28,7 +28,7 @@
         <span class="status ble-freshness" data-freshness-at="{{ sensor.receipt.iso }}" data-freshness="{{ sensor.receipt.state }}">{{ _('Recently received') if sensor.receipt.state == 'recent' else _('Older readings') if sensor.receipt.state == 'older' else _('Waiting for data') }}</span>
         <span class="ble-battery" title="{{ sensor.battery.receipt.absolute }}">{{ _('Battery') }} <strong>{{ sensor.battery.display }}{% if sensor.battery.value is not none %}%{% endif %}</strong></span>
       </div>
-      <form method="post">{{ csrf() }}<input type="hidden" name="address" value="{{ sensor.address }}"><button class="ble-secondary" name="action" value="disconnect" aria-label="{{ _('Disconnect') }}: {{ sensor.name }} ({{ sensor.address }})" title="{{ _('Disconnect removes this sensor and its saved readings from SmartShop.') }}">{{ _('Disconnect') }}</button></form>
+      <form method="post">{{ csrf() }}<input type="hidden" name="address" value="{{ sensor.address }}"><button class="ble-secondary" name="action" value="disconnect" aria-label="{{ _('Disconnect') }}: {{ sensor.name }} ({{ sensor.address }})" title="{{ _('Disconnect removes this device from SmartShop.') }}">{{ _('Disconnect') }}</button></form>
       </div>
     </header>
     <div class="ble-metrics">
@@ -49,7 +49,7 @@
         {% else %}
         <div class="ble-visual-reading">
           {% if reading.key == 'motion' %}
-          <svg class="ble-motion-visual" viewBox="0 0 220 112" role="img" aria-label="{{ _(reading.label) }}: {{ reading.display }}" data-motion="{{ 'detected' if reading.value else 'clear' if reading.value is not none else 'unknown' }}">
+          <svg class="ble-motion-visual" viewBox="0 0 220 112" role="img" aria-label="{{ _(reading.label) }}: {{ reading.display }}" data-motion="{{ 'off' if not sensor.motion_enabled else 'detected' if reading.value else 'clear' if reading.value is not none else 'unknown' }}">
             <circle class="ble-motion-ring ble-motion-ring-outer" cx="110" cy="56" r="49" />
             <circle class="ble-motion-ring ble-motion-ring-inner" cx="110" cy="56" r="37" />
             <circle class="ble-motion-disc" cx="110" cy="56" r="29" />
@@ -69,11 +69,16 @@
           <div class="ble-metric-value{% if reading.key == 'motion' %} ble-motion-value{% endif %}">{{ reading.display }}{% if reading.value is not none and reading.unit %}<span>{{ reading.unit }}</span>{% endif %}</div>
         </div>
         {% endif %}
-        <p class="ble-metric-time">{% if reading.value is not none %}{{ _('Received') }} {{ received(reading.receipt) }}{% else %}{{ _('No reading yet') }}{% endif %}</p>
+        <p class="ble-metric-time">{% if reading.key == 'motion' and not sensor.motion_enabled %}{{ _('Monitoring off') }}{% elif reading.value is not none %}{{ _('Received') }} {{ received(reading.receipt) }}{% else %}{{ _('No reading yet') }}{% endif %}</p>
         {% if reading.key == 'light' %}<p class="ble-metric-help">{{ _('Sensor light level · PS scale') }}</p>{% elif reading.key == 'motion' %}<p class="ble-metric-help">{{ _('At the last received reading') }}</p>{% else %}<p class="ble-metric-help" hidden></p>{% endif %}
         <span class="ble-old-reading" {% if reading.receipt.state != 'older' %}hidden{% endif %}>{{ _('Older reading') }}</span>
       </article>
       {% endfor %}
+    </div>
+    <div class="ble-motion-settings">
+        <form method="post" class="ble-motion-controls">{{ csrf() }}<input type="hidden" name="action" value="motion"><input type="hidden" name="address" value="{{ sensor.address }}"><input type="hidden" name="enabled" value="{{ 'off' if sensor.motion_enabled else 'on' }}"><button type="submit" role="switch" aria-checked="{{ 'true' if sensor.motion_enabled else 'false' }}">{{ sensor.motion_action_label }}</button></form>
+        <p class="ble-motion-email-status" role="status">{{ sensor.alert_status_label }}{% if sensor.alert_recipient %} · {{ sensor.alert_recipient }}{% endif %}</p>
+        <p class="ble-motion-control-help">{{ _('Controls SmartShop monitoring and emails. The sensor stays powered.') }}</p>
     </div>
     <p class="ble-missing-note" {% if not sensor.missing %}hidden{% endif %}>{{ _('Waiting for more readings. Keep the sensor nearby and check its advertising settings.') }}</p>
     <details class="ble-device-details"><summary>{{ _('Device details & settings') }}</summary>
@@ -81,6 +86,7 @@
     </details>
   </section>
   {% endfor %}
+  <p class="ble-update-note">{{ _('Armed motion monitoring continues when this page is closed. New detections email the administrator, with at least {seconds} seconds between alerts.').format(seconds=alert_cooldown|int) }}{% if not motion_email_ready %} {{ _('Configure Gmail or Resend before enabling motion email alerts') }}.{% endif %}</p>
   <p class="ble-update-note">{{ _('Live updates pause when this tab is hidden. Each value shows when its last sensor packet arrived.') }}</p>
   {% else %}
   <section class="panel ble-empty"><span class="ble-empty-icon">{{ icon('temperature') }}</span><h2>{{ _('Connect your first sensor') }}</h2><p>{{ _('Temperature, humidity, light and motion readings will appear here after you connect a sensor.') }}</p><a href="#ble-discovery">{{ _('Find a sensor') }} ↓</a></section>
@@ -91,7 +97,7 @@
       <p>{{ _('Turn on your MSP01 and keep it near the Raspberry Pi. Scanning uses the Bluetooth adapter on the server.') }}</p>
       <form method="post" data-ble-scan>{{ csrf() }}<button name="action" value="scan">{{ _('Scan for sensors') }}</button><span class="ble-scan-duration">{{ scan_seconds|int }} s · {{ _('Manual scan') }}</span></form>
       {% if candidates %}<div class="ble-nearby"><h3>{{ _('Nearby sensors') }}</h3>{% for device in candidates %}<div class="ble-candidate"><div><strong>{{ device.name }}</strong><p>{{ device.address }} · {{ device.rssi }} dBm</p></div><form method="post">{{ csrf() }}<input type="hidden" name="address" value="{{ device.address }}">{{ action('Connect', 'connect') }}</form></div>{% endfor %}</div>{% endif %}
-      <details class="ble-setup"><summary>{{ _('Setup help') }}</summary><p>{{ _('Enable HT, PIR and PS Sensor advertising in BeaconSET+ to receive temperature, humidity, motion and light readings.') }}</p><p>{{ _('Sensors broadcast readings without Bluetooth pairing. Connect saves a sensor for monitoring.') }}</p><p>{{ _('PS is the sensor photosensitive level. Lux is shown only when an illuminance frame is received.') }}</p></details>
+      <details class="ble-setup"><summary>{{ _('Setup help') }}</summary><p>{{ _('Enable HT, PIR and PS Sensor advertising in BeaconSET+ to receive temperature, humidity, motion and light readings.') }}</p><p>{{ _('Sensors broadcast readings without Bluetooth pairing. Connections and readings are temporary and clear when SmartShop restarts.') }}</p><p>{{ _('PS is the sensor photosensitive level. Lux is shown only when an illuminance frame is received.') }}</p></details>
     </div>
   </details>
 </div>

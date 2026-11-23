@@ -262,7 +262,7 @@ sudo rfkill unblock bluetooth
 `requirements-pi.txt` also includes Bleak. If BlueZ is missing, install the
 `bluez` package with your system package manager. Run SmartShop as the regular
 user; that user must have access to BlueZ on the system D-Bus. Restart SmartShop
-after installing dependencies; startup migration adds the saved-sensor table.
+after installing dependencies. BLE connections and readings use memory only.
 
 1. Turn on the MSP01 and place it within range of the Pi. Minew's guide says to
    hold the side button until the blue light flashes three times.
@@ -274,15 +274,15 @@ after installing dependencies; startup migration adds the saved-sensor table.
    BeaconPlus devices may also appear; discovery alone does not verify the model.
 4. After connecting, readings update automatically while the BLE tab is visible.
    Use **Pause updates** / **Resume updates** to control reception. **Disconnect**
-   removes a saved sensor from SmartShop without changing its firmware settings.
+   removes a sensor from the current runtime without changing its firmware settings.
 
-The MSP01 broadcasts data; Connect saves the device for monitoring rather than
-establishing a GATT pairing. A visible BLE page with saved sensors starts one
+The MSP01 broadcasts data; Connect selects the device for this runtime rather than
+establishing a GATT pairing. A visible BLE page with connected sensors starts one
 shared continuous radio receiver. A server-sent events connection pushes new
 readings to the cards, at most once per second, without reloading the page.
 Actual update frequency depends on the sensor’s advertising settings. Multiple
 viewers share the same radio; pausing, hiding or leaving a page closes its stream.
-The receiver stops after the last viewer disconnects (normally within a second).
+The receiver stops after the last viewer disconnects unless motion monitoring is armed.
 Streams reconnect periodically to recheck authorization and retry Bluetooth
 failures. The page displays reception/reconnection status and keeps old values
 with their timestamps while unavailable. Manual refresh remains available when
@@ -294,7 +294,11 @@ adapter and manual scan duration (1–30 seconds). Discovery reuses an active li
 receiver instead of starting a competing scan. Use one serving process so live
 viewers, discovery and Connect share the same device state.
 
-Saved sensors and last readings persist in the database. The receiver combines
+BLE never stores device connections, measurements, receipt timestamps, RSSI or
+raw packets in the database. Everything stays in runtime memory. Restarting the
+server clears both connections and readings, so scan and reconnect afterward.
+BLE creates no database tables and leaves any legacy BLE table untouched.
+The receiver combines
 separate BeaconPlus `0xFFE1` / `0xA1` HT, PIR, PS and light-lux frames. Each
 reading retains its own receipt timestamp; missing packets never reset values
 to zero or imply that motion stopped. Old readings remain visible as historical
@@ -309,6 +313,24 @@ display range fill the bar while keeping the actual numeric reading visible.
 Unsupported firmware frames leave readings unavailable rather than inventing
 values. Actual radio reception and firmware compatibility require a physical
 MSP01 test; automated tests use synthetic packets and a simulated scanner.
+
+Motion monitoring is off by default. **Enable motion monitoring** starts a
+background receiver and enables emails to the administrator who clicks the
+button. It continues while the page is hidden or closed, as long as SmartShop
+is running. **Disable motion monitoring** stops processing motion and prevents
+queued alerts from sending. These controls affect SmartShop monitoring; they
+do not physically power off the MSP01 or change its PIR firmware settings.
+
+Motion emails use `BLE_MOTION_EMAIL_PROVIDER` when set, otherwise the existing
+`RECEIPT_EMAIL_PROVIDER` (`gmail` or `resend`). Gmail uses `GMAIL_ADDRESS` and
+`GMAIL_APP_PASSWORD`; Resend uses `RESEND_API_KEY` and `ALERT_FROM`. The page
+shows the recipient and the latest sending/sent/failed status. A new detection
+means a transition into detected motion; repeated detected packets do not send
+more emails. `BLE_MOTION_ALERT_COOLDOWN` defaults to 60 seconds between alerts
+per sensor. All monitoring flags, recipients, cooldowns and delivery statuses
+stay in RAM, with no database tables or alert logs. After a server restart,
+reconnect the device and explicitly enable monitoring again. Automated tests
+mock mail delivery; they never send a live test email.
 
 References: [Minew MSP01 guide](https://www.minew.com/wp-content/uploads/2023/12/MSP01-Bluetooth%C2%AE-PIR-Sensor.pdf),
 [reelyActive MSP01 configuration](https://reelyactive.github.io/diy/minew-msp01-config/),

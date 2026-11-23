@@ -52,15 +52,20 @@ def decode_minew(data):
 
 
 class BLEService:
-    """Share one radio listener across live pages; stop after the last viewer leaves."""
+    """Share one radio listener across visible pages and armed motion monitors."""
 
-    def __init__(self, config, *, scanner_factory=None):
+    def __init__(self, config, *, scanner_factory=None, alert_sender=None, dispatch=None, clock=monotonic):
         self.seconds = max(1, min(30, float(config.get('BLE_SCAN_SECONDS', 8))))
         self.adapter = config.get('BLE_ADAPTER', 'hci0')
         self.scanner_factory = scanner_factory
+        self._alert_sender = alert_sender
+        self._dispatch = dispatch
+        self._clock = clock
+        self.alert_cooldown = max(0, float(config.get('BLE_MOTION_ALERT_COOLDOWN', 60)))
         self._scan_lock = Lock()
         self._state_lock = Lock()
         self._devices = {}
+        self._connections = {}
         self._scanned_at = float('-inf')
         self._live_lock = RLock()
         self.data_lock = RLock()
@@ -76,6 +81,111 @@ class BLEService:
             if monotonic() - self._scanned_at > 120:
                 return {}
             return deepcopy(self._devices)
+
+    def connected(self):
+        with self._state_lock:
+            return {address: {key: deepcopy(value) for key, value in sensor.items() if not key.startswith('_')}
+                    for address, sensor in self._connections.items()}
+
+    @property
+    def email_configured(self):
+        return bool(self._alert_sender and self._alert_sender.configured)
+
+    def connect(self, address):
+        address = normalize_address(address)
+        device = self.discovered().get(address)
+        if device is None:
+            raise ValueError('Scan again before connecting this sensor')
+        with self._state_lock:
+            self._connections.setdefault(address, {
+                'address': address, 'name': device['name'], 'motion_enabled': False,
+                'alert_recipient': None, 'alert_status': 'off', 'last_alert_at': None,
+                '_generation': uuid4().hex, '_motion_state': None,
+                '_last_alert_clock': float('-inf'), '_subscription': None,
+            })
+            self._version += 1
+
+    def disconnect(self, address):
+        address = normalize_address(address)
+        with self._live_lock:
+            with self._state_lock:
+                sensor = self._connections.pop(address, None)
+                self._version += 1
+            if sensor and sensor.get('_subscription'):
+                self.unsubscribe(sensor['_subscription'])
+
+    def set_motion_monitoring(self, address, enabled, recipient=None):
+        address = normalize_address(address)
+        with self._live_lock:
+            with self._state_lock:
+                sensor = self._connections.get(address)
+                if not sensor:
+                    raise ValueError('Connect the sensor first')
+                if sensor['motion_enabled'] == enabled and (not enabled or sensor['alert_recipient'] == recipient):
+                    return
+                if enabled and (not self.email_configured or not recipient):
+                    raise ValueError('Configure Gmail or Resend before enabling motion email alerts')
+                old_subscription = sensor.get('_subscription')
+                sensor.update(motion_enabled=enabled, alert_recipient=recipient if enabled else None,
+                              alert_status='armed' if enabled else 'off', _generation=uuid4().hex)
+                sensor['_motion_state'] = self._devices.get(address, {}).get('measurements', {}).get('motion', {}).get('value')
+                sensor['_last_alert_clock'] = float('-inf')
+                self._version += 1
+            if enabled and not old_subscription:
+                try:
+                    subscription = self.subscribe()
+                except Exception:
+                    with self._state_lock:
+                        sensor.update(motion_enabled=False, alert_recipient=None, alert_status='failed')
+                        self._version += 1
+                    raise
+                with self._state_lock:
+                    sensor['_subscription'] = subscription
+            elif not enabled and old_subscription:
+                with self._state_lock:
+                    sensor['_subscription'] = None
+                self.unsubscribe(old_subscription)
+
+    def _handle_motion(self, address, detected, received_at):
+        with self._state_lock:
+            sensor = self._connections.get(address)
+            if not sensor or not sensor['motion_enabled']:
+                return
+            previous, sensor['_motion_state'] = sensor['_motion_state'], detected
+            if not detected or previous is True or self._clock() - sensor['_last_alert_clock'] < self.alert_cooldown:
+                return
+            sensor['_last_alert_clock'] = self._clock()
+            sensor['alert_status'] = 'sending'
+            self._version += 1
+            alert = dict(id=uuid4().hex, address=address, name=sensor['name'],
+                         recipient=sensor['alert_recipient'], received_at=received_at,
+                         generation=sensor['_generation'])
+        try:
+            if not self._dispatch:
+                raise RuntimeError('Email worker is unavailable')
+            self._dispatch(self._send_motion_alert, alert)
+        except Exception:
+            self._finish_motion_alert(alert, False)
+
+    def _send_motion_alert(self, alert):
+        with self._state_lock:
+            sensor = self._connections.get(alert['address'])
+            if not sensor or not sensor['motion_enabled'] or sensor['_generation'] != alert['generation']:
+                return
+        try:
+            success = self._alert_sender.send(alert)
+        except Exception:
+            success = False
+        self._finish_motion_alert(alert, success)
+
+    def _finish_motion_alert(self, alert, success):
+        with self._state_lock:
+            sensor = self._connections.get(alert['address'])
+            if sensor and sensor['_generation'] == alert['generation'] and sensor['motion_enabled']:
+                sensor['alert_status'] = 'sent' if success else 'failed'
+                if success:
+                    sensor['last_alert_at'] = alert['received_at']
+                self._version += 1
 
     def _record(self, devices, device, advertisement):
         try:
@@ -132,9 +242,16 @@ class BLEService:
     async def _listen(self, stop):
         def detected(device, advertisement):
             with self._state_lock:
-                if self._record(self._devices, device, advertisement):
-                    self._scanned_at = monotonic()
-                    self._version += 1
+                if not self._record(self._devices, device, advertisement):
+                    return
+                self._scanned_at = monotonic()
+                self._version += 1
+            data = advertisement.service_data.get(MINEW_SERVICE, b'')
+            if data[:2] == b'\xa1\x11':
+                motion = decode_minew(data).get('motion')
+                if motion is not None:
+                    self._handle_motion(device.address.upper(), motion,
+                                        datetime.now(timezone.utc).isoformat(timespec='seconds'))
 
         scanner = self._factory()(detection_callback=detected, bluez={'adapter': self.adapter})
         try:
@@ -153,7 +270,17 @@ class BLEService:
                 if acquired:
                     break
             if acquired and not stop.is_set():
-                asyncio.run(self._listen(stop))
+                while not stop.is_set():
+                    try:
+                        self._set_state('starting')
+                        asyncio.run(self._listen(stop))
+                        break
+                    except Exception as error:
+                        self._set_state('error', str(error))
+                        with self._state_lock:
+                            armed = any(sensor['motion_enabled'] for sensor in self._connections.values())
+                        if not armed or stop.wait(5):
+                            raise
         except Exception as error:
             self._set_state('error', str(error))
         else:
@@ -193,8 +320,38 @@ class BLEService:
 
     def stop(self):
         with self._live_lock:
+            with self._state_lock:
+                for sensor in self._connections.values():
+                    sensor['motion_enabled'] = False
+                    sensor['_generation'] = uuid4().hex
             self._subscribers.clear()
             self._stop_live()
+            with self._state_lock:
+                self._devices.clear()
+                self._connections.clear()
+                self._scanned_at = float('-inf')
+                self._version += 1
+
+    def _store_scan(self, devices):
+        # Preserve independently advertised frames in RAM across scan windows.
+        with self._state_lock:
+            for address, incoming in devices.items():
+                if address not in self._devices and len(self._devices) >= 128:
+                    oldest = min(self._devices, key=lambda key: self._devices[key].get('last_seen', ''))
+                    del self._devices[oldest]
+                previous = self._devices.get(address, {})
+                device = deepcopy(incoming)
+                measurements = deepcopy(previous.get('measurements', {}))
+                for key, reading in device['measurements'].items():
+                    if (reading.get('received_at') or '') >= (measurements.get(key, {}).get('received_at') or ''):
+                        measurements[key] = reading
+                device['measurements'] = measurements
+                device['frames'] = {**previous.get('frames', {}), **device.get('frames', {})}
+                if previous.get('last_seen', '') > device['last_seen']:
+                    device['last_seen'], device['rssi'] = previous['last_seen'], previous['rssi']
+                self._devices[address] = device
+            self._scanned_at = monotonic()
+            self._version += 1
 
     def scan(self):
         # Discovery reuses the active listener instead of starting a second radio scan.
@@ -213,9 +370,7 @@ class BLEService:
                 devices = asyncio.run(asyncio.wait_for(self._collect(factory), timeout=self.seconds + 10))
             except Exception as error:
                 raise ValueError('BLE scan failed. Check Bluetooth power, adapter and permissions: ' + str(error)) from error
-            with self._state_lock:
-                self._devices = deepcopy(devices)
-                self._scanned_at = monotonic()
+            self._store_scan(devices)
             return devices
         finally:
             self._scan_lock.release()

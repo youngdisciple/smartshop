@@ -37,6 +37,8 @@ def load_config():
         "BLE_SCAN_SECONDS": float(os.getenv("BLE_SCAN_SECONDS", "8")),
         "BLE_LIGHT_BRIGHT_PS": float(os.getenv("BLE_LIGHT_BRIGHT_PS", "300")),
         "BLE_LIGHT_BRIGHT_LUX": float(os.getenv("BLE_LIGHT_BRIGHT_LUX", "300")),
+        "BLE_MOTION_EMAIL_PROVIDER": os.getenv('BLE_MOTION_EMAIL_PROVIDER'),
+        "BLE_MOTION_ALERT_COOLDOWN": float(os.getenv('BLE_MOTION_ALERT_COOLDOWN', '60')),
         "FAKE_READERS_ENABLED": enabled("FAKE_READERS_ENABLED"),
         "PRODUCT_READER_BACKEND": os.getenv('PRODUCT_READER_BACKEND', 'disabled'),
         "CF600_SERIAL_DEVICE": os.getenv('CF600_SERIAL_DEVICE', '/dev/serial/by-id/usb-CFUSB_HID_By_YLW28-if03-port0'),

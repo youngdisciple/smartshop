@@ -125,14 +125,21 @@ if (blePage) {
         if (reading.key === 'light' || reading.key === 'illuminance') drawLight(metric, reading);
         if (reading.key === 'motion') {
           const visual = metric.querySelector('.ble-motion-visual');
-          visual.dataset.motion = reading.value === null ? 'unknown' : reading.value ? 'detected' : 'clear';
+          visual.dataset.motion = !sensor.motion_enabled ? 'off' : reading.value === null ? 'unknown' : reading.value ? 'detected' : 'clear';
           visual.setAttribute('aria-label', reading.label + ': ' + reading.display);
         }
-        setTime(metric.querySelector('.ble-metric-time'), reading.receipt, reading.value === null ? '' : words.received);
+        if (reading.key === 'motion' && !sensor.motion_enabled) metric.querySelector('.ble-metric-time').textContent = reading.display;
+        else setTime(metric.querySelector('.ble-metric-time'), reading.receipt, reading.value === null ? '' : words.received);
         const help = metric.querySelector('.ble-metric-help');
         help.textContent = reading.key === 'light' ? words.ps : reading.key === 'motion' ? words.motion : '';
         help.hidden = !help.textContent;
       });
+      const motionForm = card.querySelector('.ble-motion-controls');
+      const motionButton = motionForm.querySelector('button');
+      motionButton.textContent = sensor.motion_action_label;
+      motionButton.setAttribute('aria-checked', String(sensor.motion_enabled));
+      motionForm.querySelector('[name="enabled"]').value = sensor.motion_enabled ? 'off' : 'on';
+      card.querySelector('.ble-motion-email-status').textContent = sensor.alert_status_label + (sensor.alert_recipient ? ' · ' + sensor.alert_recipient : '');
       card.querySelector('.ble-missing-note').hidden = !sensor.missing;
       card.querySelector('[data-ble-signal]').textContent = sensor.rssi === null ? '—' : sensor.rssi + ' dBm';
       setTime(card.querySelector('[data-ble-battery-time]'), sensor.battery.receipt);

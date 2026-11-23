@@ -2,6 +2,24 @@
 from flask import has_request_context, session
 
 FR = {
+    'Sensors broadcast readings without Bluetooth pairing. Connections and readings are temporary and clear when SmartShop restarts.': 'Les capteurs diffusent leurs mesures sans jumelage Bluetooth. Les connexions et les mesures sont temporaires et s’effacent au redémarrage de SmartShop.',
+    'Connect the sensor first': 'Connectez d’abord le capteur',
+    'Configure Gmail or Resend before enabling motion email alerts': 'Configurez Gmail ou Resend avant d’activer les alertes de mouvement par courriel',
+    'Monitoring off': 'Surveillance désactivée',
+    'Email alerts off': 'Alertes par courriel désactivées',
+    'Waiting for motion': 'En attente de mouvement',
+    'Sending email…': 'Envoi du courriel…',
+    'Email sent': 'Courriel envoyé',
+    'Email could not be sent': 'Impossible d’envoyer le courriel',
+    'Disable motion monitoring': 'Désactiver la surveillance des mouvements',
+    'Enable motion monitoring': 'Activer la surveillance des mouvements',
+    'Motion monitoring enabled': 'Surveillance des mouvements activée',
+    'Motion monitoring disabled': 'Surveillance des mouvements désactivée',
+    'Controls SmartShop monitoring and emails. The sensor stays powered.': 'Contrôle la surveillance et les courriels SmartShop. Le capteur reste alimenté.',
+    'Armed motion monitoring continues when this page is closed. New detections email the administrator, with at least {seconds} seconds between alerts.': 'La surveillance activée continue lorsque cette page est fermée. Les nouvelles détections sont envoyées par courriel à l’administrateur, avec au moins {seconds} secondes entre les alertes.',
+
+    'BLE sensor connected': 'Capteur BLE connecté',
+    'Disconnect removes this device from SmartShop.': 'Déconnecter supprime cet appareil de SmartShop.',
     'Dim': 'Faible',
     'Bright': 'Lumineux',
     'Bright from {value} {unit}': 'Lumineux à partir de {value} {unit}',
