@@ -75,7 +75,9 @@ class AppTests(unittest.TestCase):
             self.assertEqual(b'aria-current="page"' in response.data, path != '/dashboard')
             self.assertNotIn(b'href="/dashboard"', response.data)
             self.assertIn(b'<html lang="en">', response.data)
-            self.assertEqual(b'http-equiv="refresh"' in response.data, path == '/dashboard')
+            self.assertNotIn(b'http-equiv="refresh"', response.data)
+            if path == '/dashboard':
+                self.assertIn(b'Refresh readings', response.data)
         self.assertEqual(self.client.get('/admin/').location, '/auth/login')
         self.administrator()
         self.assertIn(b'href="/dashboard"', self.client.get('/checkout').data)
@@ -85,6 +87,26 @@ class AppTests(unittest.TestCase):
         self.assertIn(b':focus-visible', css.data)
         self.assertIn(b'@media', css.data)
         css.close()
+
+    def test_public_checkout_is_home_and_works_without_signing_in(self):
+        response = self.client.get('/')
+        self.assertEqual(response.location, '/checkout')
+        page = self.client.get(response.location)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b'SmartShop / Checkout', page.data)
+        self.assertNotIn(b'Store management', page.data)
+        with self.client.session_transaction() as session:
+            self.assertNotIn('email', session)
+            token = session['csrf']
+        response = self.client.post('/checkout', data={'csrf_token': token})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.startswith('/checkout/'))
+        cart = self.client.get(response.location)
+        self.assertEqual(cart.status_code, 200)
+        self.assertIn(b'Your cart', cart.data)
+        self.assertIn(b'SmartShop / Checkout', cart.data)
+        self.assertEqual(self.app.test_client().get(response.location).status_code, 404)
+        self.assertEqual(self.client.get('/account').location, '/auth/login')
 
     def test_customer_directory_escapes_names_and_hides_passwords(self):
         self.administrator()

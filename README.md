@@ -64,7 +64,7 @@ only. Forms and polling mutations require CSRF tokens. Use HTTPS and
    with Enter handled as a field terminator. Its actual device remains unverified.
 2. Receive positive stock quantities with a date, repeatedly if needed.
    Registration alone never adds stock. Receptions are preserved in history.
-3. Open `/checkout` and start a cart. Scan a barcode into the UPC field; Enter
+3. Open `/` or `/checkout` and start a cart. Checkout is public and requires no sign-in. Scan a barcode into the UPC field; Enter
    or Tab submits it, or click Add barcode. Each deliberate barcode scan adds
    one unit. Barcode checkout works without arming the RFID reader. Alternatively,
    arm the product reader to collect multiple RFID tags. Fake mode exposes a

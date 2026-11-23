@@ -113,6 +113,63 @@ class QuantityCheckoutTests(unittest.TestCase):
         self.assertEqual(Purchase.query.count(), 1)
         self.assertEqual(db.session.get(Customer, 'member@example.com').points, 8)
 
+    def test_one_membership_scan_before_products_or_at_review_survives_edits_and_retry(self):
+        db.session.add(MembershipCard(uid='00010203', customer_email='member@example.com'))
+        db.session.commit()
+        for stage in ('scanning', 'review'):
+            with self.subTest(stage=stage):
+                path = self.shop.new_cart()
+                cart = db.session.get(Checkout, path.rsplit('/', 1)[1])
+                if stage == 'review':
+                    self.post(path, {'action': 'barcode', 'upc': self.code})
+                    self.post(path, {'action': 'review'})
+                self.assertIn(b'value="member"', self.shop.client.get(path).data)
+                self.post(path, {'action': 'member'})
+                self.shop.scan_card()
+                poll = self.post(path + '/poll').json
+                member = db.session.get(Customer, 'member@example.com')
+                self.assertEqual(poll['membership_candidate'], member.membership_number)
+                self.assertIsNone(cart.customer_email)
+                self.post(path, {'action': 'confirm_member'})
+                self.assertEqual(cart.customer_email, member.email)
+                self.assertIsNone(self.shop.reader.operation)
+                if stage == 'scanning':
+                    self.post(path, {'action': 'barcode', 'upc': self.code})
+                    self.post(path, {'action': 'review'})
+                self.post(path, {'action': 'back'})
+                self.assertEqual(cart.customer_email, member.email)
+                self.assertNotIn(b'value="member"', self.shop.client.get(path).data)
+                # A confirmed member no longer depends on a live reader lease.
+                self.shop.reader.connected = False
+                self.post(path, {'action': 'review'})
+                self.post(path, {'action': 'payment'})
+                self.post(path + '/payment', {'outcome': 'failure'})
+                self.assertEqual(cart.customer_email, member.email)
+                self.post(path, {'action': 'payment'})
+                self.post(path + '/payment', {'outcome': 'success'})
+                purchase = Purchase.query.filter_by(checkout_id=cart.id).one()
+                self.assertEqual(purchase.customer_email, member.email)
+                self.assertEqual(purchase.points_earned, 1)
+                self.shop.reader.connected = True
+        self.assertEqual(db.session.get(Customer, 'member@example.com').points, 2)
+
+    def test_guest_and_new_checkout_clear_confirmed_membership(self):
+        db.session.add(MembershipCard(uid='00010203', customer_email='member@example.com'))
+        db.session.commit()
+        self.post(self.path, {'action': 'member'})
+        self.shop.scan_card()
+        self.post(self.path, {'action': 'confirm_member'})
+        self.post(self.path, {'action': 'guest'})
+        self.assertIsNone(self.cart.customer_email)
+        self.post(self.path, {'action': 'member'})
+        self.shop.scan_card()
+        self.post(self.path, {'action': 'confirm_member'})
+        new_path = self.shop.new_cart()
+        new_cart = db.session.get(Checkout, new_path.rsplit('/', 1)[1])
+        self.assertIsNone(new_cart.customer_email)
+        self.assertEqual(self.cart.status, 'cancelled')
+        self.assertIsNone(self.shop.reader.operation)
+
     def test_stock_drop_after_review_rolls_back_entire_sale_and_scanning_edits_are_blocked(self):
         for code in (self.code, self.code, db.session.get(Product, 2).upc, db.session.get(Product, 2).upc):
             self.barcode(code)

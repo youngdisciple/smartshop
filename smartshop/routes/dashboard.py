@@ -7,7 +7,7 @@ dashboard = Blueprint("dashboard", __name__)
 
 @dashboard.route("/")
 def home():
-    return redirect(url_for("dashboard.index"))
+    return redirect(url_for("shop.checkout_start"))
 
 
 @dashboard.route("/dashboard")

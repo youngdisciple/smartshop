@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ _('Refrigerators') }} · SmartShop{% endblock %}
-{% block head %}<meta http-equiv="refresh" content="3">{% endblock %}
 {% block content %}
 <header class="page-header">
   <div><h1>{{ _('Refrigerators') }}</h1><p>{{ _('Keep an eye on the conditions that keep things fresh.') }}</p></div>
-  <span class="page-note">{{ _('Refreshes every 3 seconds') }}</span>
+  <form method="get" action="{{ url_for('dashboard.index') }}"><button type="submit">{{ _('Refresh readings') }}</button></form>
 </header>
 {% if not mqtt_connected %}
 <div class="notice" role="status">{{ _('Refrigerator connection offline. Waiting for the MQTT broker; reconnection is automatic.') }}</div>
@@ -46,5 +45,5 @@
   <div><h2 id="fan-heading">{{ _('Fan status') }}</h2><p>{{ _('Shared cooling fan · Current status') }}</p></div>
   <span id="motor-indicator" class="status {{ 'online' if motor_on else 'idle' }}">{{ _('ON') if motor_on else _('OFF') }}</span>
 </section>
-<p class="help reload-note">{{ _('This page reloads automatically. Save threshold changes before the next refresh.') }}</p>
+<p class="help reload-note">{{ _('Readings update when you refresh. Save threshold changes before refreshing.') }}</p>
 {% endblock %}

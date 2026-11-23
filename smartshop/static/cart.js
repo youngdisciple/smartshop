@@ -9,6 +9,11 @@ async function poll() {
     if (!response.ok) throw new Error(response.status);
     const data = await response.json();
     statusNode.textContent = data.messages.join(' · ');
+    const candidate = document.querySelector('#membership-candidate');
+    if (candidate) {
+      candidate.hidden = !data.membership_candidate;
+      document.querySelector('#membership-number').textContent = data.membership_candidate || '';
+    }
     const next = JSON.stringify(data.items);
     if (statusNode.dataset.scanning === 'yes' && next !== fingerprint) {
       fingerprint = next;

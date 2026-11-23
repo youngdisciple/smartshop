@@ -9,10 +9,11 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+{% set public_checkout = request.endpoint in ['shop.checkout_start', 'shop.cart', 'shop.payment', 'shop.receipt'] %}
 <a class="skip-link" href="#main-content">{{ _('Skip to content') }}</a>
 <div class="app-layout">
   <aside class="sidebar">
-    <a class="brand" href="{{ url_for('shop.checkout_start') }}">SmartShop<span>{{ _('Store management') }}</span></a>
+    <a class="brand" href="{{ url_for('shop.checkout_start') }}">SmartShop<span>{{ _('Checkout') if public_checkout else _('Store management') }}</span></a>
     <nav aria-label="{{ _('Main navigation') }}">
       {% set links = [('shop.checkout_start', 'Checkout')] %}
       {% if g.customer and g.customer.is_admin %}{% set links = links + [('dashboard.index', 'Refrigerators')] %}{% endif %}
@@ -31,7 +32,7 @@
     </form>
   </aside>
   <main id="main-content" tabindex="-1">
-    <div class="eyebrow">SmartShop / {{ _('Store dashboard') }}</div>
+    <div class="eyebrow">SmartShop / {{ _('Checkout') if public_checkout else _('Store dashboard') }}</div>
     {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
     <ul class="flashes" role="status">{% for category, message in messages %}<li class="flash {{ category }}">{{ message }}</li>{% endfor %}</ul>
     {% endif %}{% endwith %}

@@ -251,8 +251,6 @@ def cart(cart_id):
                 notify('Review your purchase')
             elif action == 'back' and cart.status in ('review', 'payment'):
                 cart.status = 'scanning'
-                cart.customer_email = None
-                runtime().membership.cancel_owner(owner())
                 db.session.commit()
                 notify('Cart updated')
             elif action == 'cancel':
@@ -262,11 +260,11 @@ def cart(cart_id):
                 runtime().reader.cancel_owner(owner())
                 runtime().membership.cancel_owner(owner())
                 notify('Operation cancelled')
-            elif action == 'member' and cart.status == 'review':
+            elif action == 'member' and cart.status in ('scanning', 'review'):
                 session['checkout_membership'] = runtime().membership.arm(owner(), 'checkout')
                 session['membership_cart'] = cart.id
                 notify('Present a membership card')
-            elif action == 'confirm_member' and cart.status == 'review':
+            elif action == 'confirm_member' and cart.status in ('scanning', 'review'):
                 uid = selected_uid(cart)
                 card = db.session.get(MembershipCard, uid) if uid else None
                 if not card:
@@ -274,11 +272,15 @@ def cart(cart_id):
                 cart.customer_email = card.customer_email
                 db.session.commit()
                 runtime().membership.cancel_owner(owner())
+                session.pop('checkout_membership', None)
+                session.pop('membership_cart', None)
                 notify('Membership confirmed')
-            elif action == 'guest' and cart.status == 'review':
+            elif action == 'guest' and cart.status in ('scanning', 'review'):
                 cart.customer_email = None
                 runtime().membership.cancel_owner(owner())
                 db.session.commit()
+                session.pop('checkout_membership', None)
+                session.pop('membership_cart', None)
                 notify('Guest checkout selected')
             elif action == 'payment' and cart.status == 'review':
                 runtime().reader.cancel_owner(owner())
@@ -326,15 +328,18 @@ def cart_poll(cart_id):
                 messages = add_tags(cart, tags)
         except ValueError as error:
             messages = [str(error)]
-    else:
+    candidate = None
+    if cart.status in ('scanning', 'review') and not cart.customer_email and session.get('membership_cart') == cart.id:
         try:
             uid = selected_uid(cart)
             if uid:
                 card = db.session.get(MembershipCard, uid)
-                messages = ['Card ready to confirm' if card else 'Unknown membership card']
+                candidate = card.customer.membership_number if card else None
+                messages.append('Card ready to confirm' if card else 'Unknown membership card')
         except ValueError as error:
             messages = [str(error)]
-    return jsonify(items=cart.items, total_cents=cart_total(cart), messages=[tr(m) for m in messages])
+    return jsonify(items=cart.items, total_cents=cart_total(cart), messages=[tr(m) for m in messages],
+                   membership_candidate=candidate)
 
 
 @shop.route('/checkout/<cart_id>/payment', methods=['GET', 'POST'])
