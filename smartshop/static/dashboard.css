@@ -15,6 +15,19 @@ a, button, input { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
 .app-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
 .sidebar { padding: 38px 24px; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+.sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sidebar-heading .brand { min-width: 0; }
+.sidebar-toggle { width: 36px; height: 36px; flex-shrink: 0; padding: 0; color: var(--muted); background: transparent; border-color: var(--line); }
+.sidebar-toggle:hover { color: var(--panel); }
+.sidebar-toggle svg { width: 20px; height: 20px; }
+.sidebar-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
+.sidebar-toggle[hidden], #sidebar-content[hidden] { display: none; }
+@media (min-width: 701px) {
+  .app-layout.sidebar-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
+  .sidebar-collapsed .sidebar { padding: 38px 14px; }
+  .sidebar-collapsed .brand { display: none; }
+  .sidebar-collapsed .sidebar-heading { position: sticky; top: 20px; }
+}
 .brand { font-family: Georgia, 'Times New Roman', serif; font-size: 30px; letter-spacing: -1px; text-decoration: none; }
 .brand span { display: block; margin-top: 5px; color: var(--muted); font: 11px Arial, sans-serif; letter-spacing: 1.4px; text-transform: uppercase; }
 nav { display: grid; gap: 8px; margin-top: 58px; }
@@ -80,7 +93,7 @@ tbody tr:last-child > * { border-bottom: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 1150px) { .fridge-grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) {
-  .app-layout { grid-template-columns: 1fr; }
+  .app-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .sidebar { padding: 20px; border-right: 0; border-bottom: 1px solid var(--line); }
   .brand { font-size: 26px; }
   nav { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 24px; }

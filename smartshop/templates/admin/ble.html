@@ -1,0 +1,99 @@
+{% extends 'base.html' %}{% from 'shop/forms.html' import csrf, action with context %}
+{% block title %}BLE · SmartShop{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ble.css') }}">{% endblock %}
+{% macro received(info) %}{% if info.iso %}<time datetime="{{ info.iso }}" title="{{ info.absolute }}" data-received-at="{{ info.iso }}">{{ info.relative }}</time>{% else %}{{ _('No reading yet') }}{% endif %}{% endmacro %}
+{% macro icon(kind) %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if kind == 'temperature' %}<path d="M9 14.8V5a3 3 0 0 1 6 0v9.8a5 5 0 1 1-6 0Z"/><path d="M12 8v10"/><circle cx="12" cy="18" r="1.5"/>
+{% elif kind == 'humidity' %}<path d="M12 3s-7 8-7 12a7 7 0 0 0 14 0c0-4-7-12-7-12Z"/><path d="M8 15a4 4 0 0 0 4 4"/>
+{% elif kind in ['light', 'illuminance'] %}<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>
+{% else %}<circle cx="14" cy="4" r="2"/><path d="m8 10 4-3 4 4 4 1m-8-5-2 7 5 3 1 5m-6-8-3 7H3M3 8h3M2 12h3"/>{% endif %}
+</svg>
+{% endmacro %}
+{% block content %}
+<div class="ble-page"{% if sensors %} data-live-url="{{ url_for('ble.events') }}"{% endif %}>
+  <header class="page-header ble-page-header">
+    <div><h1>BLE</h1><p>{{ _('Environment & activity') }}</p></div>
+    {% if sensors %}<div class="ble-live-controls"><span id="ble-live-status" class="status" role="status">{{ _('Connecting to live updates…') }}</span><button id="ble-live-toggle" class="ble-secondary" type="button" hidden>{{ _('Pause updates') }}</button></div><form method="post" class="ble-manual-refresh" data-ble-scan>{{ csrf() }}<button name="action" value="refresh">{{ _('Refresh readings') }}<span aria-hidden="true">↻</span></button></form>{% endif %}
+  </header>
+  <div id="ble-progress" class="notice ble-progress" role="status" aria-live="polite" hidden><span class="ble-spinner" aria-hidden="true"></span><span>{{ _('Receiving sensor readings… Keep this page open.') }}</span></div>
+  {% if sensors %}
+  <div class="ble-section-heading"><h2>{{ _('Your sensors') }} <span class="ble-count">{{ sensors|length }}</span></h2><p>{{ _('Readings update automatically as sensor packets arrive') }}</p></div>
+  {% for sensor in sensors %}
+  <section class="panel ble-sensor" id="{{ sensor.anchor }}" aria-labelledby="{{ sensor.anchor }}-name">
+    <header class="ble-sensor-header">
+      <div><p class="ble-kicker">{{ _('Bluetooth sensor') }}</p><h2 id="{{ sensor.anchor }}-name">{{ sensor.name }}</h2><p class="ble-address">{{ sensor.address }}</p><p class="ble-last-seen">{{ _('Last received') }} · {{ received(sensor.receipt) }}</p></div>
+      <div class="ble-sensor-tools">
+      <div class="ble-sensor-meta">
+        <span class="status ble-freshness" data-freshness-at="{{ sensor.receipt.iso }}" data-freshness="{{ sensor.receipt.state }}">{{ _('Recently received') if sensor.receipt.state == 'recent' else _('Older readings') if sensor.receipt.state == 'older' else _('Waiting for data') }}</span>
+        <span class="ble-battery" title="{{ sensor.battery.receipt.absolute }}">{{ _('Battery') }} <strong>{{ sensor.battery.display }}{% if sensor.battery.value is not none %}%{% endif %}</strong></span>
+      </div>
+      <form method="post">{{ csrf() }}<input type="hidden" name="address" value="{{ sensor.address }}"><button class="ble-secondary" name="action" value="disconnect" aria-label="{{ _('Disconnect') }}: {{ sensor.name }} ({{ sensor.address }})" title="{{ _('Disconnect removes this sensor and its saved readings from SmartShop.') }}">{{ _('Disconnect') }}</button></form>
+      </div>
+    </header>
+    <div class="ble-metrics">
+      {% for reading in sensor.readings %}
+      <article class="ble-metric ble-metric-{{ reading.key }}{% if reading.key not in ['temperature', 'humidity'] %} ble-metric-centered{% endif %}" data-reading-at="{{ reading.receipt.iso }}" data-freshness="{{ reading.receipt.state }}" aria-labelledby="{{ sensor.anchor }}-{{ reading.key }}">
+        <div class="ble-metric-heading"><h3 id="{{ sensor.anchor }}-{{ reading.key }}">{{ _(reading.label) }}</h3><span class="ble-metric-icon">{{ icon(reading.key) }}</span></div>
+        {% if reading.key in ['temperature', 'humidity'] %}
+        <div class="ble-gauge-value">
+          <svg class="gauge ble-sensor-gauge ble-{{ reading.key }}-gauge{% if reading.gauge.error %} gauge-error{% endif %}" viewBox="0 0 220 145" role="img" aria-label="{{ _(reading.label) }}: {{ reading.gauge.label }}">
+            <path class="gauge-bg" d="M 20 110 A 90 90 0 0 1 200 110" />
+            <path class="gauge-fill" d="M 20 110 A 90 90 0 0 1 200 110" style="stroke-dasharray: {{ reading.gauge.dash }} 283" />
+            <line class="gauge-needle" x1="110" y1="110" x2="110" y2="35" style="transform: rotate({{ reading.gauge.angle }}deg)" />
+            <circle cx="110" cy="110" r="5" class="gauge-center" />
+            <text x="110" y="138" class="gauge-value">{{ reading.gauge.label }}</text>
+          </svg>
+          <div class="ble-gauge-scale" aria-hidden="true">{% if reading.key == 'temperature' %}<span>−10 °C</span><span>50 °C</span>{% else %}<span>0%</span><span>100%</span>{% endif %}</div>
+        </div>
+        {% else %}
+        <div class="ble-visual-reading">
+          {% if reading.key == 'motion' %}
+          <svg class="ble-motion-visual" viewBox="0 0 220 112" role="img" aria-label="{{ _(reading.label) }}: {{ reading.display }}" data-motion="{{ 'detected' if reading.value else 'clear' if reading.value is not none else 'unknown' }}">
+            <circle class="ble-motion-ring ble-motion-ring-outer" cx="110" cy="56" r="49" />
+            <circle class="ble-motion-ring ble-motion-ring-inner" cx="110" cy="56" r="37" />
+            <circle class="ble-motion-disc" cx="110" cy="56" r="29" />
+            <g class="ble-motion-person" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="113" cy="34" r="6" /><path d="m100 50 10-7 11 10 9 2m-20-12-5 21 12 9 3 13m-15-22-9 19H86" /></g>
+          </svg>
+          {% else %}
+          <div class="ble-light-visual" role="{{ 'meter' if reading.value is not none else 'img' }}" aria-label="{{ _(reading.label) }}: {{ reading.light_meter.label }}" data-light-state="{{ reading.light_meter.state }}"{% if reading.value is not none %} aria-valuemin="0" aria-valuemax="{{ reading.light_meter.maximum }}" aria-valuenow="{{ reading.light_meter.bounded_value }}" aria-valuetext="{{ reading.display }} {{ reading.unit }} · {{ reading.light_meter.label }}"{% endif %}>
+            <div class="ble-light-bar-layout">
+              <div class="ble-light-scale"><span>{{ _('Bright') }}</span><span>{{ _('Dim') }}</span></div>
+              <div class="ble-light-track"><div class="ble-light-fill" style="height: {{ reading.light_meter.percent }}%"></div><span class="ble-light-threshold" aria-hidden="true"></span></div>
+              <div class="ble-light-scale"><span data-light-maximum>{{ reading.light_meter.maximum_label }}</span><span>0</span></div>
+            </div>
+          </div>
+          <p class="ble-light-caption">{{ reading.light_meter.label }}</p>
+          <p class="ble-light-cutoff">{{ reading.light_meter.threshold_label }}</p>
+          {% endif %}
+          <div class="ble-metric-value{% if reading.key == 'motion' %} ble-motion-value{% endif %}">{{ reading.display }}{% if reading.value is not none and reading.unit %}<span>{{ reading.unit }}</span>{% endif %}</div>
+        </div>
+        {% endif %}
+        <p class="ble-metric-time">{% if reading.value is not none %}{{ _('Received') }} {{ received(reading.receipt) }}{% else %}{{ _('No reading yet') }}{% endif %}</p>
+        {% if reading.key == 'light' %}<p class="ble-metric-help">{{ _('Sensor light level · PS scale') }}</p>{% elif reading.key == 'motion' %}<p class="ble-metric-help">{{ _('At the last received reading') }}</p>{% else %}<p class="ble-metric-help" hidden></p>{% endif %}
+        <span class="ble-old-reading" {% if reading.receipt.state != 'older' %}hidden{% endif %}>{{ _('Older reading') }}</span>
+      </article>
+      {% endfor %}
+    </div>
+    <p class="ble-missing-note" {% if not sensor.missing %}hidden{% endif %}>{{ _('Waiting for more readings. Keep the sensor nearby and check its advertising settings.') }}</p>
+    <details class="ble-device-details"><summary>{{ _('Device details & settings') }}</summary>
+      <dl><div><dt>{{ _('Bluetooth address') }}</dt><dd>{{ sensor.address }}</dd></div><div><dt>{{ _('Signal at last reception') }}</dt><dd data-ble-signal>{{ sensor.rssi if sensor.rssi is not none else '—' }}{% if sensor.rssi is not none %} dBm{% endif %}</dd></div><div><dt>{{ _('Battery last received') }}</dt><dd data-ble-battery-time>{{ received(sensor.battery.receipt) }}</dd></div><div><dt>{{ _('Last received') }} (UTC)</dt><dd data-ble-absolute>{{ sensor.receipt.absolute or _('No reading yet') }}</dd></div><div data-ble-ps {% if not sensor.secondary_light %}hidden{% endif %}><dt>{{ _('Light level (PS)') }}</dt><dd>{% if sensor.secondary_light %}{{ sensor.secondary_light.display }} · {{ received(sensor.secondary_light.receipt) }}{% endif %}</dd></div></dl>
+    </details>
+  </section>
+  {% endfor %}
+  <p class="ble-update-note">{{ _('Live updates pause when this tab is hidden. Each value shows when its last sensor packet arrived.') }}</p>
+  {% else %}
+  <section class="panel ble-empty"><span class="ble-empty-icon">{{ icon('temperature') }}</span><h2>{{ _('Connect your first sensor') }}</h2><p>{{ _('Temperature, humidity, light and motion readings will appear here after you connect a sensor.') }}</p><a href="#ble-discovery">{{ _('Find a sensor') }} ↓</a></section>
+  {% endif %}
+  <details class="panel ble-discovery" id="ble-discovery" {% if not sensors or candidates %}open{% endif %}>
+    <summary>{{ _('Add a sensor') }}<span class="ble-discovery-model">Minew MSP01</span></summary>
+    <div class="ble-discovery-body">
+      <p>{{ _('Turn on your MSP01 and keep it near the Raspberry Pi. Scanning uses the Bluetooth adapter on the server.') }}</p>
+      <form method="post" data-ble-scan>{{ csrf() }}<button name="action" value="scan">{{ _('Scan for sensors') }}</button><span class="ble-scan-duration">{{ scan_seconds|int }} s · {{ _('Manual scan') }}</span></form>
+      {% if candidates %}<div class="ble-nearby"><h3>{{ _('Nearby sensors') }}</h3>{% for device in candidates %}<div class="ble-candidate"><div><strong>{{ device.name }}</strong><p>{{ device.address }} · {{ device.rssi }} dBm</p></div><form method="post">{{ csrf() }}<input type="hidden" name="address" value="{{ device.address }}">{{ action('Connect', 'connect') }}</form></div>{% endfor %}</div>{% endif %}
+      <details class="ble-setup"><summary>{{ _('Setup help') }}</summary><p>{{ _('Enable HT, PIR and PS Sensor advertising in BeaconSET+ to receive temperature, humidity, motion and light readings.') }}</p><p>{{ _('Sensors broadcast readings without Bluetooth pairing. Connect saves a sensor for monitoring.') }}</p><p>{{ _('PS is the sensor photosensitive level. Lux is shown only when an illuminance frame is received.') }}</p></details>
+    </div>
+  </details>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ble.js') }}" defer></script>{% endblock %}

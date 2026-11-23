@@ -6,6 +6,7 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}SmartShop{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  <script src="{{ url_for('static', filename='sidebar.js') }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -13,10 +14,16 @@
 <a class="skip-link" href="#main-content">{{ _('Skip to content') }}</a>
 <div class="app-layout">
   <aside class="sidebar">
+    <div class="sidebar-heading">
     <a class="brand" href="{{ url_for('shop.checkout_start') }}">SmartShop<span>{{ _('Checkout') if public_checkout else _('Store management') }}</span></a>
+    <button class="sidebar-toggle" type="button" aria-controls="sidebar-content" aria-expanded="true" aria-label="{{ _('Collapse sidebar') }}" title="{{ _('Collapse sidebar') }}" data-expand-label="{{ _('Expand sidebar') }}" data-collapse-label="{{ _('Collapse sidebar') }}" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18m10-14-5 5 5 5m-5-5h11"/></svg>
+    </button>
+    </div>
+    <div id="sidebar-content">
     <nav aria-label="{{ _('Main navigation') }}">
       {% set links = [('shop.checkout_start', 'Checkout')] %}
-      {% if g.customer and g.customer.is_admin %}{% set links = links + [('dashboard.index', 'Refrigerators')] %}{% endif %}
+      {% if g.customer and g.customer.is_admin %}{% set links = links + [('dashboard.index', 'Refrigerators'), ('ble.index', 'BLE')] %}{% endif %}
       {% if g.customer %}
         {% set links = links + [('shop.account', 'My account')] %}
         {% if g.customer.is_admin %}{% set links = links + [('shop.products', 'Products'), ('admin.index_customer', 'Customers')] %}{% endif %}
@@ -30,6 +37,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.path }}">
       <label for="language">{{ _('Language') }}</label><select id="language" name="language"><option value="en"{% if session.get('language', 'en') == 'en' %} selected{% endif %}>English</option><option value="fr"{% if session.get('language') == 'fr' %} selected{% endif %}>Français</option></select><button>{{ _('Apply') }}</button>
     </form>
+    </div>
   </aside>
   <main id="main-content" tabindex="-1">
     <div class="eyebrow">SmartShop / {{ _('Checkout') if public_checkout else _('Store dashboard') }}</div>

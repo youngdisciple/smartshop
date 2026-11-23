@@ -246,6 +246,75 @@ has no equivalent deduplication guarantee. Check Gmail Sent mail before retrying
 an ambiguous timeout, which could otherwise duplicate the email. Successful
 receipts are not resent. No live customer emails were sent during tests.
 
+## Minew MSP01 BLE sensors
+
+Administrators can open **BLE** in the sidebar (`/admin/ble`) to discover and
+save Minew sensors using the Raspberry Pi's Bluetooth radio. Install the BLE
+dependency in the same environment that runs SmartShop, then enable Bluetooth:
+
+```sh
+source venv/bin/activate
+python -m pip install 'bleak>=3.0,<4'
+sudo systemctl enable --now bluetooth
+sudo rfkill unblock bluetooth
+```
+
+`requirements-pi.txt` also includes Bleak. If BlueZ is missing, install the
+`bluez` package with your system package manager. Run SmartShop as the regular
+user; that user must have access to BlueZ on the system D-Bus. Restart SmartShop
+after installing dependencies; startup migration adds the saved-sensor table.
+
+1. Turn on the MSP01 and place it within range of the Pi. Minew's guide says to
+   hold the side button until the blue light flashes three times.
+2. In BeaconSET+, enable the **HT**, **PIR**, and **PS Sensor** advertising slots.
+   Configure the PIR detection periods as needed, and close the phone's sensor
+   connection before scanning from SmartShop.
+3. Sign in as an administrator, open **BLE**, and click **Scan for sensors**.
+   Match the device's Bluetooth address before choosing **Connect**. Other Minew
+   BeaconPlus devices may also appear; discovery alone does not verify the model.
+4. After connecting, readings update automatically while the BLE tab is visible.
+   Use **Pause updates** / **Resume updates** to control reception. **Disconnect**
+   removes a saved sensor from SmartShop without changing its firmware settings.
+
+The MSP01 broadcasts data; Connect saves the device for monitoring rather than
+establishing a GATT pairing. A visible BLE page with saved sensors starts one
+shared continuous radio receiver. A server-sent events connection pushes new
+readings to the cards, at most once per second, without reloading the page.
+Actual update frequency depends on the sensor’s advertising settings. Multiple
+viewers share the same radio; pausing, hiding or leaving a page closes its stream.
+The receiver stops after the last viewer disconnects (normally within a second).
+Streams reconnect periodically to recheck authorization and retry Bluetooth
+failures. The page displays reception/reconnection status and keeps old values
+with their timestamps while unavailable. Manual refresh remains available when
+the browser does not support streaming.
+
+Discovery without a live viewer takes eight seconds by default. Set
+`BLE_ADAPTER=hci0` and `BLE_SCAN_SECONDS=8` in `.env` to choose the server
+adapter and manual scan duration (1–30 seconds). Discovery reuses an active live
+receiver instead of starting a competing scan. Use one serving process so live
+viewers, discovery and Connect share the same device state.
+
+Saved sensors and last readings persist in the database. The receiver combines
+separate BeaconPlus `0xFFE1` / `0xA1` HT, PIR, PS and light-lux frames. Each
+reading retains its own receipt timestamp; missing packets never reset values
+to zero or imply that motion stopped. Old readings remain visible as historical
+values, so refresh and check timestamps before interpreting them. The PS level
+is displayed separately from lux; lux appears only for a light-lux frame.
+The light bar rises from zero to twice its brightness cutoff. Its **Dim/Bright**
+label uses a configurable display cutoff, defaulting to 300 PS or 300 lux;
+these are display settings rather than a calibration of the raw PS sensor.
+Set `BLE_LIGHT_BRIGHT_PS` or `BLE_LIGHT_BRIGHT_LUX` in `.env` and restart to
+adjust the cutoff. The cutoff is also shown beneath the bar. Values above the
+display range fill the bar while keeping the actual numeric reading visible.
+Unsupported firmware frames leave readings unavailable rather than inventing
+values. Actual radio reception and firmware compatibility require a physical
+MSP01 test; automated tests use synthetic packets and a simulated scanner.
+
+References: [Minew MSP01 guide](https://www.minew.com/wp-content/uploads/2023/12/MSP01-Bluetooth%C2%AE-PIR-Sensor.pdf),
+[reelyActive MSP01 configuration](https://reelyactive.github.io/diy/minew-msp01-config/),
+[BeaconPlus frame decoder reference](https://github.com/reelyactive/advlib-ble-services/blob/master/lib/minew.js),
+[Bleak scanner API](https://bleak.readthedocs.io/en/latest/api/scanner.html).
+
 ## Service lifecycle and refrigerator hardware
 
 Application construction/imports start no network clients, workers, DB I/O or
