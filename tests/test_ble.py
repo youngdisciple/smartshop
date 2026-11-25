@@ -74,7 +74,7 @@ class BLEPresentationTests(unittest.TestCase):
         record = device_record()
         for key, value in [('temperature', 0), ('humidity', 0), ('light', 0), ('motion', False), ('battery', 0)]:
             record['measurements'][key] = {'value': value, 'received_at': record['last_seen']}
-        view = sensor_view(SimpleNamespace(**record))
+        view = sensor_view(SimpleNamespace(**record), datetime.fromisoformat(record['last_seen']))
         self.assertFalse(view['missing'])
         self.assertEqual([reading['display'] for reading in view['readings']], ['0', '0.00', '0', 'No motion detected'])
         self.assertEqual(view['readings'][2]['unit'], 'PS')
@@ -83,6 +83,21 @@ class BLEPresentationTests(unittest.TestCase):
         view = sensor_view(SimpleNamespace(**record))
         self.assertEqual(view['readings'][2]['unit'], 'lux')
         self.assertEqual(view['secondary_light']['display'], '0')
+
+    def test_motion_expires_independently_and_recovers_with_a_fresh_packet(self):
+        record = device_record()
+        now = datetime(2026, 11, 23, 15, 3, tzinfo=timezone.utc)
+        # Other frames arriving must not make an old PIR reading look current.
+        record['last_seen'] = now.isoformat()
+        for detected in (False, True):
+            expected = 'Motion detected' if detected else 'No motion detected'
+            record['measurements']['motion'] = {'value': detected, 'received_at': '2026-11-23T15:00:00+00:00'}
+            reading = sensor_view(SimpleNamespace(**record), now)['readings'][3]
+            self.assertEqual(reading['display'], 'No recent motion data')
+            self.assertEqual(reading['sample_display'], expected)
+            self.assertEqual(reading['value'], detected)
+            record['measurements']['motion']['received_at'] = now.isoformat()
+            self.assertEqual(sensor_view(SimpleNamespace(**record), now)['readings'][3]['display'], expected)
 
     def test_receipt_handles_missing_invalid_and_old_naive_timestamps(self):
         now = datetime(2026, 11, 23, 15, 1, tzinfo=timezone.utc)
@@ -137,6 +152,7 @@ class BLEScanTests(unittest.TestCase):
         class Scanner:
             def __init__(self, detection_callback, **kwargs):
                 self.callback = detection_callback
+                self.options = kwargs
                 instances.append(self)
 
             async def start(self):
@@ -154,6 +170,7 @@ class BLEScanTests(unittest.TestCase):
         self.assertTrue(ready.wait(2))
         second = service.subscribe()
         self.assertEqual(len(instances), 1)
+        self.assertTrue(instances[0].options['bluez']['filters']['DuplicateData'])
         snapshot = service.live_snapshot()
         self.assertEqual(snapshot['devices'][ADDRESS]['measurements']['temperature']['value'], 21.5)
         # Manual discovery shares the live radio instead of competing for it.
@@ -194,10 +211,12 @@ class BLEScanTests(unittest.TestCase):
 
     def test_scan_aggregates_rotating_frames_and_releases_radio(self):
         lifecycle = []
+        options = []
 
         class Scanner:
             def __init__(self, detection_callback, **kwargs):
                 self.callback = detection_callback
+                options.append(kwargs)
 
             async def __aenter__(self):
                 lifecycle.append('started')
@@ -216,6 +235,7 @@ class BLEScanTests(unittest.TestCase):
         with patch('smartshop.services.ble.asyncio.sleep', new_callable=AsyncMock):
             devices = service.scan()
         self.assertEqual(lifecycle, ['started', 'stopped'])
+        self.assertTrue(options[0]['bluez']['filters']['DuplicateData'])
         self.assertEqual(list(devices), [ADDRESS])
         result = devices[ADDRESS]
         self.assertEqual(result['name'], 'MSP01')

@@ -33,7 +33,7 @@
     </header>
     <div class="ble-metrics">
       {% for reading in sensor.readings %}
-      <article class="ble-metric ble-metric-{{ reading.key }}{% if reading.key not in ['temperature', 'humidity'] %} ble-metric-centered{% endif %}" data-reading-at="{{ reading.receipt.iso }}" data-freshness="{{ reading.receipt.state }}" aria-labelledby="{{ sensor.anchor }}-{{ reading.key }}">
+      <article class="ble-metric ble-metric-{{ reading.key }}{% if reading.key not in ['temperature', 'humidity'] %} ble-metric-centered{% endif %}" data-reading-at="{{ reading.receipt.iso }}" data-freshness="{{ reading.receipt.state }}"{% if reading.key == 'motion' %} data-motion-enabled="{{ 'true' if sensor.motion_enabled and reading.value is not none else 'false' }}" data-motion-display="{{ reading.sample_display }}" data-motion-state="{{ 'detected' if reading.value else 'clear' }}"{% endif %} aria-labelledby="{{ sensor.anchor }}-{{ reading.key }}">
         <div class="ble-metric-heading"><h3 id="{{ sensor.anchor }}-{{ reading.key }}">{{ _(reading.label) }}</h3><span class="ble-metric-icon">{{ icon(reading.key) }}</span></div>
         {% if reading.key in ['temperature', 'humidity'] %}
         <div class="ble-gauge-value">
@@ -49,7 +49,7 @@
         {% else %}
         <div class="ble-visual-reading">
           {% if reading.key == 'motion' %}
-          <svg class="ble-motion-visual" viewBox="0 0 220 112" role="img" aria-label="{{ _(reading.label) }}: {{ reading.display }}" data-motion="{{ 'off' if not sensor.motion_enabled else 'detected' if reading.value else 'clear' if reading.value is not none else 'unknown' }}">
+          <svg class="ble-motion-visual" viewBox="0 0 220 112" role="img" aria-label="{{ _(reading.label) }}: {{ reading.display }}" data-motion="{{ 'off' if not sensor.motion_enabled else 'unknown' if reading.receipt.state != 'recent' else 'detected' if reading.value else 'clear' }}">
             <circle class="ble-motion-ring ble-motion-ring-outer" cx="110" cy="56" r="49" />
             <circle class="ble-motion-ring ble-motion-ring-inner" cx="110" cy="56" r="37" />
             <circle class="ble-motion-disc" cx="110" cy="56" r="29" />

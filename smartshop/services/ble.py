@@ -225,7 +225,7 @@ class BLEService:
     async def _collect(self, scanner_factory):
         devices = {}
         async with scanner_factory(detection_callback=lambda device, adv: self._record(devices, device, adv),
-                                   bluez={'adapter': self.adapter}):
+                                   bluez={'adapter': self.adapter, 'filters': {'DuplicateData': True}}):
             await asyncio.sleep(self.seconds)
         return devices
 
@@ -253,7 +253,8 @@ class BLEService:
                     self._handle_motion(device.address.upper(), motion,
                                         datetime.now(timezone.utc).isoformat(timespec='seconds'))
 
-        scanner = self._factory()(detection_callback=detected, bluez={'adapter': self.adapter})
+        scanner = self._factory()(detection_callback=detected,
+                                  bluez={'adapter': self.adapter, 'filters': {'DuplicateData': True}})
         try:
             await asyncio.wait_for(scanner.start(), timeout=10)
             self._set_state('receiving')

@@ -42,6 +42,10 @@ def sensor_view(sensor, now=None):
             display = tr('Motion detected') if value else tr('No motion detected')
         result = {'key': key, 'label': label, 'unit': unit, 'value': value, 'display': display,
                   'receipt': receipt(stored.get('received_at'), now)}
+        if key == 'motion':
+            result['sample_display'] = display
+            if value is not None and result['receipt']['state'] != 'recent':
+                result['display'] = tr('No recent motion data')
         if key in ('temperature', 'humidity'):
             lo, hi = (-10, 50) if key == 'temperature' else (0, 100)
             result['gauge'] = gauge(value, lo, hi, unit, precision=2) if value is not None else {

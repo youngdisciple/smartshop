@@ -27,6 +27,7 @@ FR = {
     'Waiting for another light reading': 'En attente d’une autre mesure de lumière',
     'Motion detected': 'Mouvement détecté',
     'No motion detected': 'Aucun mouvement détecté',
+    'No recent motion data': 'Aucune donnée de mouvement récente',
     'Collapse sidebar': 'Réduire le menu latéral',
     'Expand sidebar': 'Développer le menu latéral',
     'Connecting to live updates…': 'Connexion aux mises à jour en direct…',

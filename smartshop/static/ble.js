@@ -41,6 +41,13 @@ if (blePage) {
       }
       const old = node.querySelector('.ble-old-reading');
       if (old) old.hidden = state !== 'older';
+      if (node.dataset.motionEnabled === 'true') {
+        const display = state === 'recent' ? node.dataset.motionDisplay : words.staleMotion;
+        node.querySelector('.ble-motion-value').textContent = display;
+        const visual = node.querySelector('.ble-motion-visual');
+        visual.dataset.motion = state === 'recent' ? node.dataset.motionState : 'unknown';
+        visual.setAttribute('aria-label', node.querySelector('h3').textContent + ': ' + display);
+      }
     }
   }
   const liveStatus = document.querySelector('#ble-live-status');
@@ -57,14 +64,14 @@ if (blePage) {
     pause: 'Mettre en pause', resume: 'Reprendre les mises à jour',
     received: 'Reçu ', lastReceived: 'Dernière réception · ', missing: 'Aucune mesure reçue',
     ps: 'Niveau de lumière · échelle PS', motion: 'Lors de la dernière mesure reçue',
-    empty: 'Aucun capteur connecté', manual: 'Actualisation manuelle'
+    empty: 'Aucun capteur connecté', manual: 'Actualisation manuelle', staleMotion: 'Aucune donnée de mouvement récente'
   } : {
     live: 'Live updates', starting: 'Starting receiver…', reconnecting: 'Reconnecting…',
     error: 'Receiver unavailable · retrying…', paused: 'Updates paused',
     hidden: 'Paused while this tab is hidden', pause: 'Pause updates', resume: 'Resume updates',
     received: 'Received ', lastReceived: 'Last received · ', missing: 'No reading yet',
     ps: 'Sensor light level · PS scale', motion: 'At the last received reading',
-    empty: 'No sensors connected', manual: 'Manual refresh'
+    empty: 'No sensors connected', manual: 'Manual refresh', staleMotion: 'No recent motion data'
   };
   const receiverError = document.createElement('p');
   receiverError.className = 'notice ble-live-error'; receiverError.hidden = true;
@@ -126,6 +133,9 @@ if (blePage) {
         if (reading.key === 'motion') {
           const visual = metric.querySelector('.ble-motion-visual');
           visual.dataset.motion = !sensor.motion_enabled ? 'off' : reading.value === null ? 'unknown' : reading.value ? 'detected' : 'clear';
+          metric.dataset.motionEnabled = String(sensor.motion_enabled && reading.value !== null);
+          metric.dataset.motionDisplay = reading.sample_display;
+          metric.dataset.motionState = visual.dataset.motion;
           visual.setAttribute('aria-label', reading.label + ': ' + reading.display);
         }
         if (reading.key === 'motion' && !sensor.motion_enabled) metric.querySelector('.ble-metric-time').textContent = reading.display;
