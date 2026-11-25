@@ -2,14 +2,14 @@ import math
 from smartshop.services.fridge_monitor import ERROR_VALUE
 
 
-def gauge(value, lo, hi, unit):
+def gauge(value, lo, hi, unit, *, precision=1):
     error = value == ERROR_VALUE
     ratio = 0 if error else max(0, min(1, (value - lo) / (hi - lo)))
     return {
         "error": error,
         "dash": ratio * math.pi * 90,
         "angle": -90 + ratio * 180,
-        "label": str(ERROR_VALUE) if error else f"{value:.1f} {unit}",
+        "label": str(ERROR_VALUE) if error else f"{value:.{precision}f} {unit}",
     }
 
 

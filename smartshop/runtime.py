@@ -7,6 +7,8 @@ from .services.fridge_monitor import FridgeMonitor
 from .services.mqtt import MqttService
 from .services.reply_reader import ReplyReader
 from .services.membership import MembershipReader
+from .services.ble import BLEService
+from .services.motion_alerts import MotionEmailSender
 from .hardware.product_reader import ProductReader, configured_adapter
 
 
@@ -14,6 +16,7 @@ class Runtime:
     def __init__(self, config, *, fan=None):
         self.config = config
         self.membership = MembershipReader(config)
+        self.ble = BLEService(config, alert_sender=MotionEmailSender(config), dispatch=self._dispatch)
         self.reader = ProductReader(configured_adapter(config))
         self.checkout_lock = RLock()
         self.fan = fan if fan is not None else FanController()
@@ -69,7 +72,7 @@ class Runtime:
             self._stop_event.set()
             failure = None
             # Always release every resource, even when one adapter fails.
-            for service in (self.mqtt, self.membership, self.reader):
+            for service in (self.mqtt, self.membership, self.reader, self.ble):
                 try:
                     service.stop()
                 except Exception as error:
