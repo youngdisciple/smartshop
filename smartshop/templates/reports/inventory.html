@@ -1,0 +1,12 @@
+{% extends 'reports/layout.html' %}
+{% block title %}Inventory report{% endblock %}
+{% block report %}
+<p id="inventory-status">Stock refreshes every five seconds.</p>
+<section class="panel table-scroll" tabindex="0" aria-label="Inventory">
+  <table>
+    <thead><tr><th>Product</th><th>Product ID</th><th>Category</th><th>Available quantity</th><th>Last restocked</th></tr></thead>
+    <tbody id="inventory-rows">{% include 'reports/inventory_rows.html' %}</tbody>
+  </table>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='reports.js') }}" defer></script>{% endblock %}

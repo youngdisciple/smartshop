@@ -1,0 +1,42 @@
+.report-tabs, .report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+.report-tabs a {
+  padding: .5rem .8rem;
+  border-radius: .5rem;
+}
+.report-tabs a[aria-current="page"] {
+  background: #24564b;
+  color: white;
+}
+.report-filters, .report-ranking, .report-metrics > div {
+  padding: 1rem;
+}
+.report-filters label {
+  display: grid;
+  gap: .25rem;
+}
+.report-metrics, .report-rankings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.report-metrics dd {
+  margin: .25rem 0 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+.report-ranking li {
+  padding-block: .25rem;
+}
+.report-ranking strong {
+  margin-inline-start: .5rem;
+}
+.report-period {
+  font-weight: 600;
+}

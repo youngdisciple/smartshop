@@ -1,0 +1,6 @@
+{% for product, restocked in rows %}
+<tr>
+  <th scope="row">{{ product.name }}</th><td>{{ product.id }}</td><td>{{ product.category }}</td>
+  <td>{{ product.stock }}</td><td>{{ restocked or 'No restock recorded' }}</td>
+</tr>
+{% else %}<tr><td colspan="5">No products match this category.</td></tr>{% endfor %}

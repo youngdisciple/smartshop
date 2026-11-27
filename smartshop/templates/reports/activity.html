@@ -1,0 +1,26 @@
+{% extends 'reports/layout.html' %}
+{% block title %}Customer activity report{% endblock %}
+{% block report %}
+<p>Counts distinct customers with an account. New customers made their first purchase during the selected period.</p>
+<dl class="report-metrics">
+  <div class="panel"><dt>Total customers</dt><dd>{{ total }}</dd></div>
+  <div class="panel"><dt>New customers</dt><dd>{{ new }}</dd></div>
+  <div class="panel"><dt>Returning customers</dt><dd>{{ total - new }}</dd></div>
+</dl>
+<h2 class="section-title">Customers by day</h2>
+<section class="panel table-scroll" tabindex="0" aria-label="Daily customer counts">
+  <table>
+    <thead><tr><th>Date</th><th>Customers</th><th>Activity</th></tr></thead>
+    <tbody>
+    {% for day, count in days %}
+    <tr><th scope="row">{{ day }}</th><td>{{ count }}</td><td>
+      <meter min="0" max="{{ busiest or 1 }}" value="{{ count }}" aria-label="{{ count }} customers"></meter>
+      {% if count == busiest == quietest %}Busiest and quietest
+      {% elif count == busiest %}Busiest
+      {% elif count == quietest %}Quietest{% endif %}
+    </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

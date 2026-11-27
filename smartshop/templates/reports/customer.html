@@ -1,0 +1,22 @@
+{% extends 'reports/layout.html' %}
+{% block title %}My purchase reports{% endblock %}
+{% block report %}
+<dl class="report-metrics">
+  <div class="panel"><dt>Total spent</dt><dd>{{ spending|money }} CAD</dd></div>
+  <div class="panel"><dt>Purchases</dt><dd>{{ purchases|length }}</dd></div>
+</dl>
+<h2 class="section-title">Purchase history</h2>
+<section class="panel table-scroll" tabindex="0" aria-label="Purchase history">
+  <table>
+    <thead><tr><th>Date and time (UTC)</th><th>Total (CAD)</th><th>Receipt</th></tr></thead>
+    <tbody>
+    {% for purchase in purchases %}
+    <tr><td>{{ purchase.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ purchase.total_cents|money }}</td>
+    <td><a href="{{ url_for('shop.receipt', purchase_id=purchase.id) }}">View receipt</a></td></tr>
+    {% else %}<tr><td colspan="3">No purchases in this period.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+<h2 class="section-title">Spending by product</h2>
+{% include 'reports/product_sales.html' %}
+{% endblock %}

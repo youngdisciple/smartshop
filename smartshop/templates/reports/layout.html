@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='reports.css') }}">{% endblock %}
+{% block content %}
+<header class="page-header"><h1>{{ self.title() }}</h1></header>
+{% if request.blueprint == 'admin' %}
+<nav class="report-tabs" aria-label="Reports">
+  {% for endpoint, label in [('admin.report_inventory', 'Inventory'), ('admin.report_sales', 'Sales'), ('admin.report_activity', 'Customer activity')] %}
+  <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+{% else %}
+<p><a href="{{ url_for('shop.account') }}">Back to my account</a></p>
+{% endif %}
+<form class="panel report-filters" method="get">
+  {% if start is defined %}
+  <label>Start date <input type="date" name="start" value="{{ start }}" required></label>
+  <label>End date <input type="date" name="end" value="{{ end }}" required></label>
+  {% endif %}
+  {% if categories is defined %}
+  <label>Category <select name="category">
+    <option value="">All categories</option>
+    {% for option in categories %}<option{% if option == category %} selected{% endif %}>{{ option }}</option>{% endfor %}
+  </select></label>
+  {% endif %}
+  {% if limit is defined %}
+  <label>Products per ranking <input type="number" name="limit" min="1" max="100" value="{{ limit }}" required></label>
+  {% endif %}
+  <button type="submit">Apply filters</button>
+  <button type="submit" name="format" value="csv">Download CSV</button>
+</form>
+{% if start is defined %}<p class="report-period">{{ start.strftime('%b %d, %Y') }} – {{ end.strftime('%b %d, %Y') }} · UTC</p>{% endif %}
+{% block report %}{% endblock %}
+{% endblock %}

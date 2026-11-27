@@ -1,0 +1,11 @@
+<section class="panel table-scroll" tabindex="0" aria-label="Product breakdown">
+  <table>
+    <thead><tr><th>Product</th><th>Product ID</th><th>Category</th><th>Units</th><th>Amount (CAD)</th></tr></thead>
+    <tbody>
+    {% for product in rows %}
+      <tr><th scope="row">{{ product.name }}</th><td>{{ product.id }}</td><td>{{ product.category }}</td>
+      <td>{{ product.quantity }}</td><td>{{ product.revenue|money }}</td></tr>
+    {% else %}<tr><td colspan="5">No purchases match these filters.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>

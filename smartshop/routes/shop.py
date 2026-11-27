@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from smartshop.extensions import db
 from smartshop.models import Checkout, Customer, MembershipCard, Product, Purchase, PurchaseItem, Reception
 from smartshop.security import admin_required, login_required, owner
+from smartshop.presentation import report_csv
 from smartshop.presentation.i18n import tr
 from smartshop.services.catalog import (
     product_values, register_rfid_unit, remove_rfid_unit, removed_rfid_serials, sold_rfid_serials, upc,
@@ -12,6 +13,7 @@ from smartshop.services.catalog import (
 )
 from smartshop.services.checkout import add_tags, add_barcode, cart_total, change_quantity, finalize, remove_product, restore_product, review
 from smartshop.services.receipts import deliver
+from smartshop.services import reports
 
 shop = Blueprint('shop', __name__)
 
@@ -167,6 +169,22 @@ def account():
     purchases = db.session.execute(db.select(Purchase).filter_by(customer_email=g.customer.email).order_by(Purchase.created_at.desc())).scalars().all()
     card = db.session.execute(db.select(MembershipCard).filter_by(customer_email=g.customer.email)).scalar_one_or_none()
     return render_template('shop/account.html', purchases=purchases, card=card)
+
+
+@shop.get('/account/reports')
+@login_required
+def account_reports():
+    start, end = reports.period()
+    purchases = db.session.scalars(
+        db.select(Purchase).where(Purchase.customer_email == g.customer.email, *reports.bounds(start, end))
+        .order_by(Purchase.created_at.desc(), Purchase.id)
+    ).all()
+    rows = reports.product_sales(start, end, email=g.customer.email)
+    spending = sum(purchase.total_cents for purchase in purchases)
+    if request.args.get('format') == 'csv':
+        return report_csv.customer(start, end, purchases, rows, spending)
+    return render_template('reports/customer.html', start=start, end=end, purchases=purchases,
+                           rows=rows, spending=spending)
 
 
 @shop.route('/account/card', methods=['GET', 'POST'])

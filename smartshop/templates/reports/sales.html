@@ -1,0 +1,20 @@
+{% extends 'reports/layout.html' %}
+{% block title %}Sales report{% endblock %}
+{% block report %}
+<dl class="report-metrics">
+  <div class="panel"><dt>Total sales</dt><dd>{{ revenue|money }} CAD</dd></div>
+  <div class="panel"><dt>Units sold</dt><dd>{{ units }}</dd></div>
+</dl>
+<div class="report-rankings">
+  {% for title, products in [('Most sold', top), ('Least sold', bottom)] %}
+  <section class="panel report-ranking">
+    <h2>{{ title }}</h2>
+    {% if products %}
+    <ol>{% for product in products %}<li>{{ product.name }} <strong>{{ product.quantity }}</strong></li>{% endfor %}</ol>
+    {% else %}<p>No products sold in this period.</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+<h2 class="section-title">Sold items by product</h2>
+{% include 'reports/product_sales.html' %}
+{% endblock %}

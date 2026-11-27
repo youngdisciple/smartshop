@@ -25,8 +25,8 @@
       {% set links = [('shop.checkout_start', 'Checkout')] %}
       {% if g.customer and g.customer.is_admin %}{% set links = links + [('dashboard.index', 'Refrigerators'), ('ble.index', 'BLE')] %}{% endif %}
       {% if g.customer %}
-        {% set links = links + [('shop.account', 'My account')] %}
-        {% if g.customer.is_admin %}{% set links = links + [('shop.products', 'Products'), ('admin.index_customer', 'Customers')] %}{% endif %}
+        {% set links = links + [('shop.account', 'My account'), ('shop.account_reports', 'My purchase reports')] %}
+        {% if g.customer.is_admin %}{% set links = links + [('shop.products', 'Products'), ('admin.index_customer', 'Customers'), ('admin.report_inventory', 'Reports')] %}{% endif %}
       {% else %}{% set links = links + [('auth.login', 'Sign in'), ('auth.signup', 'Create account')] %}{% endif %}
       {% for endpoint, label in links %}
       <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} class="active" aria-current="page"{% endif %}>{{ _(label) }}</a>
